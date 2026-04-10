@@ -19,8 +19,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import logging
 import pandas as pd
 import os
+
+logger = logging.getLogger(__name__)
 
 class DatasetManager:
     def __init__(self, data):
@@ -39,7 +42,7 @@ class DatasetManager:
 
         for order_id in order_ids:
             file_path = f'command_{order_id}_RAW_DATA.csv'
-            data = pd.read_csv(file_path, sep=separator, decimal=decimal)
+            data = pd.read_csv(file_path, sep=separator, decimal=decimal, encoding='utf-8')
             all_data_frames.append(data)
 
         concatenated_data = pd.concat(all_data_frames, ignore_index=True)
@@ -83,29 +86,31 @@ class DatasetManager:
         default_columns = ['DATE', 'PSTAT', 'T', 'UABS', 'U', 'TD', 'GLO', 'DIR', 'DIF', 'N', 'INFRAR', 'DD', 'FF', 'RR1']
         if columns is None:
             columns = default_columns
-        if not all(column in self.data.columns for column in columns):
-            raise ValueError("One or more columns are not in the dataset")
-        subset_data = self.data[columns]
+        missing = [c for c in columns if c not in self.data.columns]
+        if missing:
+            logger.warning("Column(s) absent from dataset and skipped: %s", missing)
+            columns = [c for c in columns if c in self.data.columns]
+        if not columns:
+            raise ValueError("No requested columns are present in the dataset.")
+        subset_data = self.data[columns].copy()
         subset_data['DATE'] = pd.to_datetime(subset_data['DATE'], format='%Y%m%d%H')
         return DatasetManager(subset_data)
-    
+
     def save_subset_as_csv(self, station_name, start_year, end_year, station_info):
         """
         Saves the subset as a CSV file, filename is composed with station name, start year, and end year.
         """
-        file_name     = "RAW_DATA_" + station_name + '_' + str(start_year) + '-' + str(end_year) + '.csv'
-        filtered_data = self.data
-        filtered_data.to_csv(file_name, index=False, )
+        file_name = "RAW_DATA_" + station_name + '_' + str(start_year) + '-' + str(end_year) + '.csv'
 
-        with open(file_name, 'r') as fichier:
-            contenu_original = fichier.readlines()
         with open(file_name, 'w') as fichier:
             for col in station_info.columns:
                 fichier.write(f"#{col:10} : {station_info.iloc[0][col]}\n")
-            fichier.writelines(contenu_original)
-        
-        print(f"Subset saved as {file_name}")
-        
+
+        self.data.to_csv(file_name, index=False, mode='a')
+
+        logger.info("Subset saved as %s", file_name)
+
+    @staticmethod
     def delete_temporary_csvs(order_ids):
         """
         Deletes all temporary CSV files corresponding to each order_id.
@@ -114,5 +119,4 @@ class DatasetManager:
             file_path = f'command_{order_id}_RAW_DATA.csv'
             if os.path.exists(file_path):
                 os.remove(file_path)
-                print(f"Deleted temporary file: {file_path}")
-
+                logger.info("Deleted temporary file: %s", file_path)

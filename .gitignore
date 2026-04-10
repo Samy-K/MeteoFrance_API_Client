@@ -1,0 +1,10 @@
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Données téléchargées
+command_*_RAW_DATA.csv
+RAW_DATA_*.csv
+
+# Credentials
+API_config.txt

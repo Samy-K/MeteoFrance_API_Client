@@ -1,4 +1,0 @@
-[Parameters]
-APPLICATION_ID =
-DATA_SERVER = https://public-api.meteofrance.fr/public/DPClim/v1
-TOKEN =

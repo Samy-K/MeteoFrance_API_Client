@@ -19,92 +19,121 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import logging
+import unicodedata
 import pandas as pd
 from datetime import datetime
 import configparser
 import os
-from client import *
-from Data_handler import *
+from client import Client
+from Data_handler import DatasetManager
+
+class ColorFormatter(logging.Formatter):
+    COLORS = {
+        logging.DEBUG:    '\033[36m',    # cyan
+        logging.INFO:     '\033[32m',    # green
+        logging.WARNING:  '\033[33m',    # yellow
+        logging.ERROR:    '\033[31m',    # red
+        logging.CRITICAL: '\033[1;31m',  # bold red
+    }
+    RESET = '\033[0m'
+    WHITE = '\033[97m'
+
+    def format(self, record):
+        color   = self.COLORS.get(record.levelno, self.RESET)
+        ts      = self.formatTime(record, self.datefmt)
+        level   = f"{color}[{record.levelname}]{self.RESET}"
+        message = f"{self.WHITE}{record.getMessage()}{self.RESET}"
+        return f"{ts} {level} {message}"
+
+handler = logging.StreamHandler()
+handler.setFormatter(ColorFormatter(datefmt='%Y-%m-%d %H:%M:%S'))
+logging.getLogger().setLevel(logging.INFO)
+logging.getLogger().addHandler(handler)
+
+logger = logging.getLogger(__name__)
 
 def main():
-    
-    global BASE_API_URL
+
     config = configparser.ConfigParser()
     config.read("API_config.txt")
 
     application_id = config.get("Parameters", "APPLICATION_ID")
     BASE_API_URL   = config.get("Parameters", "DATA_SERVER")
     api_key        = config.get("Parameters", "TOKEN").replace('"', '')
-    print("-" * 30)
-    print('Credidentials :\n')
-    print(f"APPLICATION ID : {application_id}\nSERVER         : {BASE_API_URL}\nTOKEN          : {api_key[:32]}....")
-    print("-" * 30)
-    
-    client = Client(api_key=api_key, base_url=BASE_API_URL)  
-    
+
+    logger.info("Credentials — APPLICATION_ID: %s | SERVER: %s | TOKEN: %s....",
+                application_id, BASE_API_URL, api_key[:32])
+
+    client = Client(api_key=api_key, base_url=BASE_API_URL)
+
     # Department choice
     while (DEPARTEMENT := input("\nEnter the desired department number. Numbers range from 1 to 95, plus 971, 972, 973, 974, 975, 984, 985, 986, 987, 988 for French overseas departments and territories.\n\nDepartment :"\
                                 ).strip()) not in [str(i) for i in range(1, 96)] + ['971', '972', '973', '974', '975', '976', '977', '978', '984', '986', '987', '988', '989']: pass
-    
+
     # Get the department weather station list
     stations = client.get_stations_list(DEPARTEMENT)
     if stations:
         # Station choice
         selected_station = client.select_station(stations)
-        
+
         # Retrieve selected station information
         station_info = client.get_station_info(selected_station)
-        print("-" * 30)
-        print("Selected weather station informations :\n")
+        logger.info("Selected station:")
         for col in station_info.columns:
-            print(f"{col:10} : {station_info.iloc[0][col]}")
-        print("-" * 30)
-        
+            logger.info("  %s : %s", col, station_info.iloc[0][col])
+
         # Time period selection
         annee_minimale = pd.to_datetime(station_info.iloc[0]['DateDebut']).year
         annee_maximale = pd.to_datetime(station_info.iloc[0]['DateFin'], errors='coerce').year if not \
             pd.isna(pd.to_datetime(station_info.iloc[0]['DateFin'], errors='coerce')) else datetime.now().year
 
-        while not (annee_minimale <= (B_annee := int(input("Please enter a starting year > DateDebut (YYYY format)  : "))) < annee_maximale): pass    
-        while not (B_annee        <= (E_annee := int(input("Please enter a ending year < DateFin (YYYY format)      : "))) < annee_maximale): pass
-        
+        while not (annee_minimale <= (B_annee := int(input("Please enter a starting year >= DateDebut (YYYY format) : "))) <= annee_maximale): pass
+        while not (B_annee        <= (E_annee := int(input("Please enter a ending year <= DateFin (YYYY format)    : "))) <= annee_maximale): pass
+
         # Place order
-        print("-" * 30)
-        print("Order summary :\n")
-        for col in station_info.drop(columns=['LieuDit', 'Bassin', 'DateDebut', 'DateFin']).columns:
-            print(f"{col:10}  : {station_info.iloc[0][col]}")
-        print(f"Time period : {B_annee}-{E_annee}")
-        print("-" * 30)
+        logger.info("Order summary — station: %s | period: %d–%d",
+                    station_info.iloc[0]['ID'], B_annee, E_annee)
         confirmation = 'Y' if input("\nPlace Order ? (Y/n) : ").strip().lower() != 'n' else 'n'
+        order_id = []
         if confirmation == 'Y':
             order_id = client.order_station_data(selected_station, B_annee, E_annee)
             if order_id:
-                print("Order(s) placed successfully. Order ID(s) :", order_id)
+                logger.info("Order(s) placed successfully. IDs: %s", order_id)
                 client.download_command_file(order_id)
         else:
-            print("Cancelled.")
+            logger.info("Order cancelled.")
+            return
     else:
-        print("FAIL !")
+        logger.error("Failed to retrieve station list for department %s.", DEPARTEMENT)
+        return
 
     # Formatting data
-    dataset       = DatasetManager.from_csv(order_id)
+    downloaded = [oid for oid in order_id if os.path.exists(f"command_{oid}_RAW_DATA.csv")]
+    missing    = [oid for oid in order_id if oid not in downloaded]
+    if missing:
+        logger.warning("%d file(s) could not be downloaded and will be skipped: %s", len(missing), missing)
+    if not downloaded:
+        logger.error("No files were downloaded. Aborting data processing.")
+        return
+
+    dataset       = DatasetManager.from_csv(downloaded)
     final_dataset = dataset.create_subset()
     quality_check = final_dataset.check_quality()    # Check for missing data
     parameters    = final_dataset.list_parameters()  # List all parameters
     basic_stats   = final_dataset.basic_statistics() # Basic statistical insights
     data_summary  = final_dataset.data_summary()     # Summary of the dataset
-    
-    print("-" * 30)
-    print("Missing data per parameter (parameter / % missing) :\n")
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None): 
-        print(quality_check)
-    print("-" * 30)
-    
+
+    logger.info("Missing data per parameter (%%  missing):\n%s",
+                quality_check.to_string())
+
     # Writing data
-    final_dataset.save_subset_as_csv(station_name = str(station_info.iloc[0]['ID']) + '_' + str(station_info.iloc[0]['LieuDit']).replace(' ', '-'), 
+    nom_normalise = unicodedata.normalize('NFD', str(station_info.iloc[0]['Nom']))
+    nom_normalise = ''.join(c for c in nom_normalise if unicodedata.category(c) != 'Mn').upper().replace(' ', '-')
+    final_dataset.save_subset_as_csv(station_name = str(station_info.iloc[0]['ID']) + '_' + nom_normalise,
                                        start_year=B_annee, end_year=E_annee, station_info=station_info)
     # Cleaning
-    DatasetManager.delete_temporary_csvs(order_id)
+    DatasetManager.delete_temporary_csvs(downloaded)
 
 if __name__ == '__main__':
     main()
