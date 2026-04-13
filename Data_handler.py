@@ -96,11 +96,15 @@ class DatasetManager:
         subset_data['DATE'] = pd.to_datetime(subset_data['DATE'], format='%Y%m%d%H')
         return DatasetManager(subset_data)
 
-    def save_subset_as_csv(self, station_name, start_year, end_year, station_info):
+    def save_subset_as_csv(self, station_name, start_year, end_year, station_info, output_dir="out"):
         """
         Saves the subset as a CSV file, filename is composed with station name, start year, and end year.
+        Output is written inside output_dir/; output_dir/figures/ is also created for future plots.
         """
-        file_name = "RAW_DATA_" + station_name + '_' + str(start_year) + '-' + str(end_year) + '.csv'
+        figures_dir = os.path.join(output_dir, "figures")
+        os.makedirs(figures_dir, exist_ok=True)
+
+        file_name = os.path.join(output_dir, "RAW_DATA_" + station_name + '_' + str(start_year) + '-' + str(end_year) + '.csv')
 
         with open(file_name, 'w') as fichier:
             for col in station_info.columns:

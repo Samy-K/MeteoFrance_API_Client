@@ -27,6 +27,7 @@ import configparser
 import os
 from client import Client
 from Data_handler import DatasetManager
+from quality_report import generate_quality_pdf
 
 class ColorFormatter(logging.Formatter):
     COLORS = {
@@ -130,8 +131,11 @@ def main():
     # Writing data
     nom_normalise = unicodedata.normalize('NFD', str(station_info.iloc[0]['Nom']))
     nom_normalise = ''.join(c for c in nom_normalise if unicodedata.category(c) != 'Mn').upper().replace(' ', '-')
+    output_dir    = f"out_{str(station_info.iloc[0]['ID'])}_{nom_normalise}"
     final_dataset.save_subset_as_csv(station_name = str(station_info.iloc[0]['ID']) + '_' + nom_normalise,
-                                       start_year=B_annee, end_year=E_annee, station_info=station_info)
+                                       start_year=B_annee, end_year=E_annee, station_info=station_info,
+                                       output_dir=output_dir)
+    generate_quality_pdf(final_dataset, station_info, output_dir=output_dir)
     # Cleaning
     DatasetManager.delete_temporary_csvs(downloaded)
 
