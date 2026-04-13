@@ -41,7 +41,7 @@ class VarConfig:
     plateau_h:  Optional[int]   = 24     # consecutive equal values (hours); None = skip
 
 VARIABLES: dict = {
-    'T':      VarConfig('2 m Air Temperature',      '°C',     -60,   60,  delta_max=10,  plateau_h=24),
+    'T':      VarConfig('2 m Air Temperature',      '°C',     -60,   60,  delta_max=8,  plateau_h=24),
     'TD':     VarConfig('Dew Point Temperature',    '°C',     -80,   50,  delta_max=10,  plateau_h=24),
     'U':      VarConfig('Relative Humidity',        '%',        0,  100,  delta_max=None, plateau_h=24),
     'UABS':   VarConfig('Absolute Humidity',        'g/m³',     0,   50,  delta_max=None, plateau_h=None),
