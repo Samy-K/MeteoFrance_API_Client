@@ -2,6 +2,10 @@
 .claude/
 CLAUDE.md
 
+# Dossiers de sortie et cache Python
+out*/
+__pycache__/
+
 # Données téléchargées
 command_*_RAW_DATA.csv
 RAW_DATA_*.csv
