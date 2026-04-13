@@ -1,6 +1,7 @@
 """
 Quality control report generator – MeteoFrance hourly data.
 Outputs quality_checks.pdf in the specified output directory.
+Individual figures are also saved as PNG in output_dir/figures/.
 
 Checks per variable:
   - Missing values
@@ -40,19 +41,19 @@ class VarConfig:
     plateau_h:  Optional[int]   = 24     # consecutive equal values (hours); None = skip
 
 VARIABLES: dict = {
-    'T':      VarConfig('Température à 2 m',         '°C',     -60,   60,  delta_max=10,  plateau_h=24),
-    'TD':     VarConfig('Point de rosée',             '°C',     -80,   50,  delta_max=10,  plateau_h=24),
-    'U':      VarConfig('Humidité relative',          '%',        0,  100,  delta_max=None, plateau_h=24),
-    'UABS':   VarConfig('Humidité absolue',           'g/m³',     0,   50,  delta_max=None, plateau_h=None),
-    'PSTAT':  VarConfig('Pression station',           'hPa',    870, 1084,  delta_max=5,   plateau_h=24),
-    'GLO':    VarConfig('Rayonnement global',         'W/m²',   -10, 1400,  delta_max=None, plateau_h=None),
-    'DIR':    VarConfig('Rayonnement direct',         'W/m²',   -10, 1400,  delta_max=None, plateau_h=None),
-    'DIF':    VarConfig('Rayonnement diffus',         'W/m²',   -10,  800,  delta_max=None, plateau_h=None),
-    'INFRAR': VarConfig('Rayonnement infrarouge',     'W/m²',   150,  700,  delta_max=None, plateau_h=None),
-    'N':      VarConfig('Nébulosité',                 'octas',    0,    8,  delta_max=None, plateau_h=None),
-    'DD':     VarConfig('Direction du vent',          '°',        0,  360,  delta_max=None, plateau_h=None),
-    'FF':     VarConfig('Vitesse du vent',            'm/s',      0,   75,  delta_max=20,  plateau_h=12),
-    'RR1':    VarConfig('Précipitations horaires',    'mm',       0,  200,  delta_max=None, plateau_h=None),
+    'T':      VarConfig('2 m Air Temperature',      '°C',     -60,   60,  delta_max=10,  plateau_h=24),
+    'TD':     VarConfig('Dew Point Temperature',    '°C',     -80,   50,  delta_max=10,  plateau_h=24),
+    'U':      VarConfig('Relative Humidity',        '%',        0,  100,  delta_max=None, plateau_h=24),
+    'UABS':   VarConfig('Absolute Humidity',        'g/m³',     0,   50,  delta_max=None, plateau_h=None),
+    'PSTAT':  VarConfig('Station Pressure',         'hPa',    870, 1084,  delta_max=5,   plateau_h=24),
+    'GLO':    VarConfig('Global Radiation',         'W/m²',   -10, 1400,  delta_max=None, plateau_h=None),
+    'DIR':    VarConfig('Direct Radiation',         'W/m²',   -10, 1400,  delta_max=None, plateau_h=None),
+    'DIF':    VarConfig('Diffuse Radiation',        'W/m²',   -10,  800,  delta_max=None, plateau_h=None),
+    'INFRAR': VarConfig('Infrared Radiation',       'W/m²',   150,  700,  delta_max=None, plateau_h=None),
+    'N':      VarConfig('Cloud Cover',              'octas',    0,    8,  delta_max=None, plateau_h=None),
+    'DD':     VarConfig('Wind Direction',           '°',        0,  360,  delta_max=None, plateau_h=None),
+    'FF':     VarConfig('Wind Speed',               'm/s',      0,   75,  delta_max=20,  plateau_h=12),
+    'RR1':    VarConfig('Hourly Precipitation',     'mm',       0,  200,  delta_max=None, plateau_h=None),
 }
 
 _FLAG_COLORS = {
@@ -167,15 +168,13 @@ def _style_table(tbl, header_color='#2c3e50', stripe_color='#ecf0f1'):
 # ── Cover page ─────────────────────────────────────────────────────────────
 
 def _cover_page(pdf: PdfPages, df: pd.DataFrame, station_info: pd.DataFrame,
-                all_checks: dict, n_gaps: int, n_dup: int) -> None:
+                all_checks: dict, n_gaps: int, n_dup: int,
+                figures_dir: Optional[str] = None) -> None:
     fig = plt.figure(figsize=(8.27, 11.69))
     fig.patch.set_facecolor('white')
 
     # ── Header ────────────────────────────────────────────────────────────
-    # Positions en coordonnées figure (0=bas, 1=haut). Tous les titres de
-    # section sont des fig.text() — jamais ax.set_title() — pour contrôler
-    # précisément l'espacement sans débordement.
-    fig.text(0.5, 0.975, "Rapport de Contrôle Qualité",
+    fig.text(0.5, 0.975, "Quality Control Report",
              ha='center', fontsize=18, fontweight='bold')
     station_label = (f"{station_info.iloc[0].get('ID', '')}  –  "
                      f"{station_info.iloc[0].get('Nom', '')}")
@@ -183,48 +182,76 @@ def _cover_page(pdf: PdfPages, df: pd.DataFrame, station_info: pd.DataFrame,
     period = (f"{df['DATE'].min().strftime('%d/%m/%Y')} "
               f"→  {df['DATE'].max().strftime('%d/%m/%Y')}")
     fig.text(0.5, 0.930, period, ha='center', fontsize=11, color='#555555')
-    fig.text(0.5, 0.912, f"Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}",
+    fig.text(0.5, 0.912, f"Generated on {datetime.now().strftime('%d/%m/%Y at %H:%M')}",
              ha='center', fontsize=9, color='#777777')
 
     # ── Station info ──────────────────────────────────────────────────────
-    # Titre à 0.893 → axes de 0.760 à 0.886 (hauteur 0.126)
-    fig.text(0.06, 0.893, 'Informations station',
+    fig.text(0.06, 0.893, 'Station Information',
              fontsize=10, fontweight='bold', color='#2c3e50')
-    ax_info = fig.add_axes([0.06, 0.760, 0.88, 0.126])
+    ax_info = fig.add_axes([0.06, 0.768, 0.88, 0.118])
     ax_info.axis('off')
     info_keys = ['ID', 'Nom', 'Altitude', 'Latitude', 'Longitude', 'DateDebut', 'DateFin']
     info_rows = [[k, str(station_info.iloc[0].get(k, '–'))]
                  for k in info_keys if k in station_info.columns]
-    tbl = ax_info.table(cellText=info_rows, colLabels=['Paramètre', 'Valeur'],
+    tbl = ax_info.table(cellText=info_rows, colLabels=['Parameter', 'Value'],
                         bbox=[0, 0, 1, 1], cellLoc='left')
     _style_table(tbl)
 
     # ── Global dataset info ───────────────────────────────────────────────
-    # Titre à 0.741 → axes de 0.638 à 0.734 (hauteur 0.096)
-    fig.text(0.06, 0.741, 'Série temporelle',
+    fig.text(0.06, 0.750, 'Time Series',
              fontsize=10, fontweight='bold', color='#2c3e50')
-    ax_glob = fig.add_axes([0.06, 0.638, 0.88, 0.096])
+    ax_glob = fig.add_axes([0.06, 0.662, 0.88, 0.080])
     ax_glob.axis('off')
     dt_mode = df['DATE'].diff().dropna().mode()
     dt_str  = str(dt_mode.iloc[0]) if len(dt_mode) else '–'
     glob_rows = [
-        ['Pas de temps détecté',            dt_str],
-        ['Nombre de pas de temps',          f"{len(df):,}"],
-        ['Trous temporels (pas irréguliers)', str(n_gaps)],
-        ['Horodatages dupliqués',           str(n_dup)],
+        ['Detected time step',              dt_str],
+        ['Number of time steps',            f"{len(df):,}"],
+        ['Temporal gaps (irregular steps)', str(n_gaps)],
+        ['Duplicate timestamps',            str(n_dup)],
     ]
-    tbl2 = ax_glob.table(cellText=glob_rows, colLabels=['Indicateur', 'Valeur'],
+    tbl2 = ax_glob.table(cellText=glob_rows, colLabels=['Indicator', 'Value'],
                          bbox=[0, 0, 1, 1], cellLoc='left')
     _style_table(tbl2)
 
-    # ── Summary table (all variables) ─────────────────────────────────────
-    # Titre à 0.619 → axes de 0.035 à 0.612 (hauteur 0.577)
-    fig.text(0.06, 0.619, 'Résumé qualité par variable',
+    # ── Quality flag descriptions ─────────────────────────────────────────
+    fig.text(0.06, 0.644, 'Quality Flags',
              fontsize=10, fontweight='bold', color='#2c3e50')
-    ax_sum = fig.add_axes([0.06, 0.035, 0.88, 0.577])
+    ax_flags = fig.add_axes([0.06, 0.548, 0.88, 0.088])
+    ax_flags.axis('off')
+    flag_rows = [
+        ['MISSING',    'Timestamp present but no measurement recorded.'],
+        ['ABSURD',     'Value outside physical bounds (variable-specific thresholds — see documentation*).'],
+        ['JUMP',       'Hourly change exceeds the maximum allowed delta (variable-specific — see documentation*).'],
+        ['PLATEAU',    'Too many consecutive identical values (variable-specific minimum run length — see documentation*).'],
+        ['CONTEXTUAL', 'Statistical outlier vs. typical (month, hour) distribution  [Q1 − 3×IQR,  Q3 + 3×IQR].'],
+    ]
+    tbl_flags = ax_flags.table(cellText=flag_rows, colLabels=['Flag', 'Description'],
+                               bbox=[0, 0, 1, 1], cellLoc='left',
+                               colWidths=[0.13, 0.87])
+    tbl_flags.auto_set_font_size(False)
+    tbl_flags.set_fontsize(7.5)
+    tbl_flags.scale(1, 1.30)
+    for (r, c), cell in tbl_flags.get_celld().items():
+        cell.set_edgecolor('white')
+        if r == 0:
+            cell.set_facecolor('#2c3e50')
+            cell.set_text_props(color='white', fontweight='bold')
+        else:
+            flag_code = flag_rows[r - 1][0] if r <= len(flag_rows) else ''
+            cell.set_facecolor(_FLAG_BG.get(flag_code, '#ffffff'))
+    fig.text(0.06, 0.540,
+             '* Per-variable threshold documentation — coming soon.',
+             fontsize=7, color='#888888', style='italic')
+
+    # ── Summary table (all variables) ─────────────────────────────────────
+    fig.text(0.06, 0.526, 'Quality Summary by Variable',
+             fontsize=10, fontweight='bold', color='#2c3e50')
+    ax_sum = fig.add_axes([0.06, 0.035, 0.88, 0.483])
     ax_sum.axis('off')
-    col_labels = ['Variable', 'Unité', 'N', 'Manquants', 'Absurdes',
-                  'Sauts', 'Plateaux', 'Contextuels', 'Flaggés %']
+    col_labels = ['Variable', 'Unit', 'N', 'Missing', 'Absurd',
+                  'Jumps', 'Plateaus', 'Contextual', 'Flagged']
+    col_widths = [0.24, 0.07, 0.08, 0.155, 0.07, 0.07, 0.08, 0.095, 0.08]
     rows = []
     for var, chk in all_checks.items():
         cfg = VARIABLES.get(var)
@@ -234,7 +261,7 @@ def _cover_page(pdf: PdfPages, df: pd.DataFrame, station_info: pd.DataFrame,
             cfg.label if cfg else var,
             cfg.unit  if cfg else '',
             f"{chk['n']:,}",
-            f"{chk['n_missing']:,} ({chk['pct_missing']:.1f} %)",
+            f"{chk['n_missing']:,}\n({chk['pct_missing']:.1f} %)",
             str(chk['n_absurd']),
             str(chk['n_jumps']),
             str(chk['n_plateau']),
@@ -242,20 +269,24 @@ def _cover_page(pdf: PdfPages, df: pd.DataFrame, station_info: pd.DataFrame,
             f"{pct_flagged:.1f} %",
         ])
     tbl3 = ax_sum.table(cellText=rows, colLabels=col_labels,
-                        bbox=[0, 0, 1, 1], cellLoc='center')
+                        bbox=[0, 0, 1, 1], cellLoc='center',
+                        colWidths=col_widths)
     _style_table(tbl3)
     for (r, c), cell in tbl3.get_celld().items():
         if r > 0 and c == 0:
             cell.set_text_props(ha='left')
 
     pdf.savefig(fig, bbox_inches='tight')
+    if figures_dir:
+        fig.savefig(os.path.join(figures_dir, 'cover.png'), bbox_inches='tight', dpi=150)
     plt.close(fig)
 
 
 # ── Per-variable page ──────────────────────────────────────────────────────
 
 def _variable_page(pdf: PdfPages, var: str, series: pd.Series,
-                   dates: pd.Series, cfg: VarConfig, chk: dict) -> None:
+                   dates: pd.Series, cfg: VarConfig, chk: dict,
+                   figures_dir: Optional[str] = None) -> None:
     fig = plt.figure(figsize=(8.27, 11.69))
     fig.patch.set_facecolor('white')
     fig.suptitle(f"{cfg.label}  ({cfg.unit})", fontsize=14, fontweight='bold', y=0.985)
@@ -272,7 +303,7 @@ def _variable_page(pdf: PdfPages, var: str, series: pd.Series,
     clean = chk['flags'] == ''
     ax_ts.plot(dates[clean], series[clean],
                color='#2c3e50', linewidth=0.35, alpha=0.7, zorder=2,
-               label='Valides')
+               label='Valid')
     for code, color in _FLAG_COLORS.items():
         mask = chk['flags'].str.contains(code, regex=False)
         if mask.any():
@@ -280,7 +311,7 @@ def _variable_page(pdf: PdfPages, var: str, series: pd.Series,
                           color=color, s=7, zorder=3, label=code, alpha=0.85)
     if cfg.phys_min is not None:
         ax_ts.axhline(cfg.phys_min, color='red', linewidth=0.7, linestyle='--',
-                      alpha=0.45, label=f'Seuil physique [{cfg.phys_min}, {cfg.phys_max}]')
+                      alpha=0.45, label=f'Physical bounds [{cfg.phys_min}, {cfg.phys_max}]')
         ax_ts.axhline(cfg.phys_max, color='red', linewidth=0.7, linestyle='--', alpha=0.45)
     ax_ts.set_ylabel(f"{cfg.label} ({cfg.unit})", fontsize=9)
     ax_ts.legend(fontsize=7, ncol=4, loc='upper right',
@@ -294,23 +325,23 @@ def _variable_page(pdf: PdfPages, var: str, series: pd.Series,
     valid = series.dropna()
     if len(valid) > 0:
         stats_data = [
-            ['N total',      f"{chk['n']:,}"],
-            ['N valides',    f"{len(valid):,}"],
-            ['Manquants',    f"{chk['n_missing']:,}  ({chk['pct_missing']:.1f} %)"],
-            ['Minimum',      f"{valid.min():.3f}"],
-            ['Maximum',      f"{valid.max():.3f}"],
-            ['Moyenne',      f"{valid.mean():.3f}"],
-            ['Écart-type',   f"{valid.std():.3f}"],
-            ['Médiane',      f"{valid.median():.3f}"],
-            ['Q 0.01',       f"{valid.quantile(0.01):.3f}"],
-            ['Q 0.99',       f"{valid.quantile(0.99):.3f}"],
+            ['Total N',    f"{chk['n']:,}"],
+            ['Valid N',    f"{len(valid):,}"],
+            ['Missing',    f"{chk['n_missing']:,}  ({chk['pct_missing']:.1f} %)"],
+            ['Minimum',    f"{valid.min():.3f}"],
+            ['Maximum',    f"{valid.max():.3f}"],
+            ['Mean',       f"{valid.mean():.3f}"],
+            ['Std Dev',    f"{valid.std():.3f}"],
+            ['Median',     f"{valid.median():.3f}"],
+            ['Q 0.01',     f"{valid.quantile(0.01):.3f}"],
+            ['Q 0.99',     f"{valid.quantile(0.99):.3f}"],
         ]
     else:
-        stats_data = [['N total', f"{chk['n']:,}"], ['Données', 'Toutes manquantes']]
-    tbl = ax_tbl.table(cellText=stats_data, colLabels=['Statistique', 'Valeur'],
+        stats_data = [['Total N', f"{chk['n']:,}"], ['Data', 'All missing']]
+    tbl = ax_tbl.table(cellText=stats_data, colLabels=['Statistic', 'Value'],
                        loc='upper center', cellLoc='left')
     _style_table(tbl)
-    ax_tbl.set_title('Statistiques descriptives', fontsize=9,
+    ax_tbl.set_title('Descriptive Statistics', fontsize=9,
                      fontweight='bold', loc='left', pad=4)
 
     # ── Flags summary ─────────────────────────────────────────────────────
@@ -331,7 +362,7 @@ def _variable_page(pdf: PdfPages, var: str, series: pd.Series,
         ['CONTEXTUAL', f"{chk['n_contextual']:,}", _pct('n_contextual')],
         ['TOTAL',      f"{n_flagged:,}",           pct_flagged],
     ]
-    tbl2 = ax_flg.table(cellText=flg_rows, colLabels=['Code', 'Nb', '%'],
+    tbl2 = ax_flg.table(cellText=flg_rows, colLabels=['Flag', 'Count', '%'],
                         loc='upper center', cellLoc='center')
     tbl2.auto_set_font_size(False)
     tbl2.set_fontsize(8)
@@ -345,7 +376,7 @@ def _variable_page(pdf: PdfPages, var: str, series: pd.Series,
         elif 1 <= r <= len(code_order):
             bg = _FLAG_BG.get(code_order[r - 1], '#ffffff')
             cell.set_facecolor(bg)
-    ax_flg.set_title('Flags qualité', fontsize=9, fontweight='bold', loc='left', pad=4)
+    ax_flg.set_title('Quality Flags', fontsize=9, fontweight='bold', loc='left', pad=4)
 
     # ── Missing values per year ───────────────────────────────────────────
     ax_bar = fig.add_subplot(gs[2, :])
@@ -361,22 +392,24 @@ def _variable_page(pdf: PdfPages, var: str, series: pd.Series,
                              edgecolor='white', linewidth=0.5, alpha=0.8, zorder=3)
         ax_bar2.plot(years, pct_yr.values, color='black', marker='o', markersize=3,
                      linewidth=1.2, linestyle='--', alpha=0.7)
-        ax_bar2.set_ylabel('% manquant', fontsize=8)
+        ax_bar2.set_ylabel('% missing', fontsize=8)
         ax_bar2.yaxis.set_major_formatter(mticker.FormatStrFormatter('%.1f %%'))
         ax_bar2.tick_params(labelsize=7)
         for bar, val in zip(bars, na_yr.values):
             if val > 0:
                 ax_bar.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
                             str(int(val)), ha='center', va='bottom', fontsize=6)
-        ax_bar.set_ylabel('Valeurs manquantes', fontsize=9)
+        ax_bar.set_ylabel('Missing values', fontsize=9)
         ax_bar.set_xticks(years)
         ax_bar.set_xticklabels(years, rotation=45, ha='right', fontsize=7)
         ax_bar.grid(axis='y', alpha=0.25)
         ax_bar.set_axisbelow(True)
-    ax_bar.set_title('Valeurs manquantes par année', fontsize=9,
+    ax_bar.set_title('Missing Values per Year', fontsize=9,
                      fontweight='bold', loc='left', pad=4)
 
     pdf.savefig(fig, bbox_inches='tight')
+    if figures_dir:
+        fig.savefig(os.path.join(figures_dir, f'{var}.png'), bbox_inches='tight', dpi=150)
     plt.close(fig)
 
 
@@ -419,12 +452,14 @@ def generate_quality_pdf(dataset_manager, station_info: pd.DataFrame,
         return ""
 
     os.makedirs(output_dir, exist_ok=True)
+    figures_dir = os.path.join(output_dir, 'figures')
+    os.makedirs(figures_dir, exist_ok=True)
     out_path = os.path.join(output_dir, 'quality_checks.pdf')
 
     with PdfPages(out_path) as pdf:
-        _cover_page(pdf, df, station_info, all_checks, n_gaps, n_dup)
+        _cover_page(pdf, df, station_info, all_checks, n_gaps, n_dup, figures_dir=figures_dir)
         for var, chk in all_checks.items():
-            _variable_page(pdf, var, df[var], dates, VARIABLES[var], chk)
+            _variable_page(pdf, var, df[var], dates, VARIABLES[var], chk, figures_dir=figures_dir)
 
     logger.info("Quality report saved: %s", out_path)
     return out_path

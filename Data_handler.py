@@ -106,9 +106,15 @@ class DatasetManager:
 
         file_name = os.path.join(output_dir, "RAW_DATA_" + station_name + '_' + str(start_year) + '-' + str(end_year) + '.csv')
 
+        _col_en = {
+            'ID': 'ID', 'Nom': 'Name', 'Altitude': 'Altitude',
+            'Latitude': 'Latitude', 'Longitude': 'Longitude',
+            'DateDebut': 'StartDate', 'DateFin': 'EndDate',
+        }
         with open(file_name, 'w') as fichier:
             for col in station_info.columns:
-                fichier.write(f"#{col:10} : {station_info.iloc[0][col]}\n")
+                label = _col_en.get(col, col)
+                fichier.write(f"#{label:10} : {station_info.iloc[0][col]}\n")
 
         self.data.to_csv(file_name, index=False, mode='a')
 
