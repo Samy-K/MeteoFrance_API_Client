@@ -1,27 +1,34 @@
-# -*- coding: utf-8 -*-
 """
-fetch_mf_stations.py
-====================
-Scrapes every MeteoFrance DPClim hourly station and saves the result to
-mf_stations.csv (one row per station, most-recent record kept).
+Météo-France DPClim station catalogue builder.
+
+Queries the DPClim API for every French department, collects all unique
+hourly station IDs, then fetches full metadata for each station and writes
+the result to ``weather_stations_infos/mf_stations.csv`` (one row per
+station, most-recent record of operation kept).
 
 Strategy
 --------
-1. Query /liste-stations/horaire for every department → collect unique IDs.
-2. Query /information-station for every ID → collect coordinates and dates.
-3. Write mf_stations.csv.
+1. Query ``/liste-stations/horaire`` for every department — collect unique IDs.
+2. Query ``/information-station`` for every ID — collect coordinates and dates.
+3. Write ``mf_stations.csv``.
 
 Rate limiting
 -------------
-Hard cap: 100 req/min.  This script targets ~85 req/min (REQUEST_INTERVAL=0.7 s).
-On a 429 response the script backs off exponentially before retrying.
+Hard cap: 100 req/min.  This script targets ~85 req/min
+(``REQUEST_INTERVAL = 0.7 s``).  On a 429 response the script backs off
+exponentially before retrying.
 
 Resume / checkpoint
 -------------------
-If mf_stations.csv already exists the script reads it, skips already-fetched
-station IDs, and appends new rows.  Safe to interrupt and restart.
+If ``mf_stations.csv`` already exists the script reads it, skips
+already-fetched station IDs, and appends new rows.  Safe to interrupt and
+restart at any point.
 
 Expected runtime: ~25 minutes for ~2 000 stations (fresh run).
+
+Author:  Samy KRAIEM
+Created: 2024
+Updated: 2026
 """
 
 import configparser

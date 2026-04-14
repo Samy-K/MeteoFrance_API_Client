@@ -1,19 +1,29 @@
 """
-Climatological factsheet generator - MeteoFrance hourly data.
-Produces factsheet.pdf (one page per variable group) + PNG figures.
+Climatological factsheet generator for hourly meteorological data.
 
-Pages:
-  - Cover        station info + full-period climatological normals
-  - Temperature  T (+ TD overlay)  — monthly clim, diurnal cycle, annual trend, records
-  - Humidity     U, UABS           — monthly clim, diurnal cycle, annual trend, records
-  - Pressure     PSTAT             — monthly clim, diurnal cycle, annual trend, records
-  - Wind         FF + DD           — wind rose, monthly boxplot, annual trend, records
-  - Radiation    GLO/DIR/DIF/INFRAR— monthly clim, diurnal heatmap, annual trend
-  - Precipitation RR1              — monthly cumul clim, annual total trend, extreme events
-  - Cloud Cover  N                 — monthly okta frequency, annual trend
+Produces ``factsheet.pdf`` (one A4 page per variable group) plus PNG
+figures saved in ``output_dir/figures/``.
 
-Mann-Kendall test and Theil-Sen slope are implemented without external dependencies.
-A warning is emitted if the record is shorter than MIN_YEARS_WARNING years.
+Pages generated (skipped automatically when the variable is absent)
+--------------------------------------------------------------------
+- Cover         station info + full-period climatological normals table
+- Temperature   T (+ TD overlay) — monthly clim, diurnal cycle, annual trend, records
+- Humidity      U, UABS          — monthly clim, diurnal cycle, annual trend, records
+- Pressure      PSTAT            — monthly clim, diurnal cycle, annual trend, records
+- Wind          FF + DD          — wind rose, monthly boxplot, annual trend, records
+- Radiation     GLO/DIR/DIF/INFRAR — monthly clim, diurnal heatmap, annual trend
+- Precipitation RR1              — monthly cumul clim, annual total trend, extreme events
+- Cloud Cover   N                — monthly okta frequency stacked bar, annual trend
+
+Statistical methods
+-------------------
+- Mann-Kendall trend test and Theil-Sen slope estimator are implemented
+  without external dependencies (uses ``math.erf`` for the normal CDF).
+- A warning is emitted when the record is shorter than MIN_YEARS_WARNING years.
+
+Author:  Samy KRAIEM
+Created: 2024
+Updated: 2026
 """
 
 import logging
@@ -82,6 +92,17 @@ def _mk_box(ax, text: str, p: float):
 
 def _annual_agg(series: pd.Series, dti: pd.DatetimeIndex,
                 agg: str = 'mean') -> pd.Series:
+    """Resample *series* to yearly frequency using the requested aggregation.
+
+    Args:
+        series (pd.Series): Hourly values to aggregate.
+        dti (pd.DatetimeIndex): UTC DatetimeIndex aligned with *series*.
+        agg (str): Aggregation function — one of ``'mean'``, ``'sum'``,
+            ``'max'``, ``'min'``.  Defaults to ``'mean'``.
+
+    Returns:
+        pd.Series: Annual values indexed by year-end timestamps, NaN years dropped.
+    """
     s = pd.Series(series.values, index=dti)
     r = s.resample('YE')
     if agg == 'mean': return r.mean().dropna()
@@ -943,11 +964,24 @@ def _page_thresholds(pdf: PdfPages, df: pd.DataFrame,
 
 def generate_factsheet_pdf(dataset_manager, station_info: pd.DataFrame,
                            output_dir: str = "out") -> str:
-    """
-    Generate a climatological factsheet PDF for the station.
-    One page per variable group (cover + 7 variable pages).
-    Skips pages whose variables are absent from the dataset.
-    Returns the path to the generated PDF, or empty string on failure.
+    """Generate a climatological factsheet PDF for the station.
+
+    Produces one A4 page per variable group (cover + up to 8 variable pages).
+    Pages whose required variables are absent from the dataset are silently
+    skipped.  Individual figures are also saved as PNG files under
+    ``output_dir/figures/``.
+
+    Args:
+        dataset_manager: A ``DatasetManager`` instance whose ``.data``
+            DataFrame contains at least a ``DATE`` column.
+        station_info (pd.DataFrame): One-row station metadata DataFrame
+            (ID, Nom, Altitude, Latitude, Longitude, DateDebut, DateFin).
+        output_dir (str): Directory in which to write the PDF and figures.
+            Created if it does not exist.
+
+    Returns:
+        str: Absolute path to the generated PDF, or an empty string if the
+            operation failed.
     """
     df    = dataset_manager.data
     dates = df['DATE']

@@ -1,5 +1,12 @@
 """
-Shared helpers used by multiple modules.
+Shared utility functions used across multiple modules.
+
+Provides statistical (Mann-Kendall), astronomical (solar elevation),
+coordinate-parsing, and matplotlib styling helpers.
+
+Author:  Samy KRAIEM
+Created: 2024
+Updated: 2026
 """
 
 import math
@@ -10,12 +17,19 @@ import numpy as np
 
 
 def mann_kendall(y) -> Tuple[float, float, float, float]:
-    """
-    Mann-Kendall trend test + Theil-Sen estimator on an annual series.
-    Returns (tau, p_value, sen_slope_per_year, sen_intercept).
+    """Compute the Mann-Kendall trend test and Theil-Sen estimator.
 
-    No external dependencies (uses math.erf for the normal CDF).
-    Ties correction omitted — negligible on annual climate series.
+    Operates on an annual time series.  No external dependencies —
+    uses math.erf for the normal CDF.  Ties correction is omitted
+    as it is negligible on annual climate series.
+
+    Args:
+        y (array-like): 1-D sequence of annual values (NaNs are dropped).
+
+    Returns:
+        tuple: (tau, p_value, sen_slope_per_year, sen_intercept).
+            All four values are NaN when fewer than 4 valid data points
+            are available.
     """
     y = np.asarray(y, dtype=float)
     y = y[~np.isnan(y)]
@@ -51,9 +65,18 @@ def mann_kendall(y) -> Tuple[float, float, float, float]:
 
 def solar_elevation_vec(lat_deg: float, lon_deg: float,
                         dti: 'pd.DatetimeIndex') -> 'np.ndarray':
-    """
-    Vectorized solar elevation angle (degrees) for each UTC timestamp in dti.
-    Uses simplified solar geometry (±0.5° accuracy — sufficient for day/night detection).
+    """Return the vectorised solar elevation angle for each UTC timestamp.
+
+    Uses simplified solar geometry (±0.5° accuracy), which is sufficient
+    for day/night detection.
+
+    Args:
+        lat_deg (float): Station latitude in decimal degrees.
+        lon_deg (float): Station longitude in decimal degrees.
+        dti (pd.DatetimeIndex): UTC timestamps to evaluate.
+
+    Returns:
+        np.ndarray: Solar elevation angle in degrees for each timestamp.
     """
     doy      = dti.dayofyear.values.astype(float)
     hour_utc = dti.hour.values + dti.minute.values / 60.0
@@ -72,17 +95,24 @@ def solar_elevation_vec(lat_deg: float, lon_deg: float,
 
 
 def parse_coord(s: str) -> float:
-    """
-    Parse a coordinate string in decimal or cardinal-degree notation.
+    """Parse a coordinate string in decimal or cardinal-degree notation.
 
-    Accepted examples:
-      48.85      48,85      -2.35      +48.85
-      44,38°N    44.38°N    44,38° N
-       4,64°E     4.64°E     4,64° E
-      44,38°S   →  -44.38
-       4,64°W   →   -4.64
+    Accepted formats::
 
-    Raises ValueError if the string cannot be parsed.
+        48.85   48,85   -2.35   +48.85
+        44,38°N   44.38°N   44,38° N
+         4,64°E    4.64°E    4,64° E
+        44,38°S  →  -44.38
+         4,64°W  →   -4.64
+
+    Args:
+        s (str): Coordinate string to parse.
+
+    Returns:
+        float: Coordinate value in decimal degrees (negative for S/W).
+
+    Raises:
+        ValueError: If the string cannot be parsed.
     """
     s = s.strip()
     m = re.match(r'^([+-]?\d+[.,]?\d*)\s*°\s*([NSEWnsew])$', s)
@@ -98,7 +128,15 @@ def parse_coord(s: str) -> float:
 
 def style_table(tbl, header_color: str = '#2c3e50', stripe_color: str = '#ecf0f1',
                 fontsize: float = 8, scale: float = 1.4) -> None:
-    """Apply consistent dark-header / alternating-row styling to a matplotlib table."""
+    """Apply consistent dark-header and alternating-row styling to a matplotlib table.
+
+    Args:
+        tbl: Matplotlib Table object to style.
+        header_color (str): Background colour for the header row.
+        stripe_color (str): Background colour for even data rows.
+        fontsize (float): Font size for all cells.
+        scale (float): Row-height scale factor passed to Table.scale().
+    """
     tbl.auto_set_font_size(False)
     tbl.set_fontsize(fontsize)
     tbl.scale(1, scale)

@@ -1,24 +1,32 @@
 """
-Quality control report generator - MeteoFrance hourly data.
-Outputs quality_checks.pdf in the specified output directory.
-Individual figures are also saved as PNG in output_dir/figures/.
+Quality control report generator for hourly meteorological data.
 
-Checks per variable:
-  - Missing values
-  - Physical range (ABSURD)
-  - Temporal jumps (JUMP)
-  - Constant plateaus (PLATEAU)
-  - Contextual outliers by (month, hour) via 3xIQR (CONTEXTUAL)
+Produces ``quality_checks.pdf`` in the specified output directory.
+Individual figures are also saved as PNG in ``output_dir/figures/``.
 
-Cross-variable coherence checks (dedicated page):
-  - TD > T  (dew point above air temperature)
-  - GLO > DIR + DIF + 20 W/m²  (radiation balance violation)
-  - RR1 > 0 with U = 0  (precipitation with zero humidity)
-  - GLO > 5 W/m² during astronomical night  (requires station lat/lon)
+Per-variable checks
+-------------------
+- MISSING    — timestamp present but no measurement recorded
+- ABSURD     — value outside physical bounds (variable-specific)
+- JUMP       — hourly change exceeds the maximum allowed delta
+- PLATEAU    — too many consecutive identical values
+- CONTEXTUAL — statistical outlier vs. typical (month, hour) via 3 × IQR
 
-Global checks (cover page):
-  - Temporal continuity (gaps in the time index)
-  - Duplicate timestamps
+Cross-variable coherence checks (dedicated page)
+-------------------------------------------------
+- TD > T          — dew point above air temperature (thermodynamically impossible)
+- GLO > DIR+DIF   — global radiation exceeds component sum by > 20 W/m²
+- RR1 > 0, U = 0  — precipitation recorded with zero relative humidity
+- GLO at night    — global radiation > 5 W/m² during astronomical night
+
+Global checks (cover page)
+---------------------------
+- Temporal continuity (gaps in the time index)
+- Duplicate timestamps
+
+Author:  Samy KRAIEM
+Created: 2024
+Updated: 2026
 """
 
 import logging
@@ -218,6 +226,21 @@ def _coherence_page(pdf: PdfPages, coherence_results: dict,
 # ── Core check per variable ────────────────────────────────────────────────
 
 def _check_variable(series: pd.Series, dates: pd.Series, cfg: VarConfig) -> dict:
+    """Run all quality checks for a single variable series.
+
+    Computes five boolean masks (MISSING, ABSURD, JUMP, PLATEAU, CONTEXTUAL)
+    and a combined ``flags`` column.
+
+    Args:
+        series (pd.Series): Hourly observation values (NaN = missing).
+        dates (pd.Series): Corresponding UTC timestamps (same index as *series*).
+        cfg (VarConfig): Thresholds and metadata for this variable.
+
+    Returns:
+        dict: Keys include ``n``, ``n_missing``, ``pct_missing``, ``n_absurd``,
+            ``n_jumps``, ``n_plateau``, ``n_contextual``, ``flags`` (str Series),
+            and per-flag boolean masks.
+    """
     n = len(series)
     mask_missing = series.isna()
     n_missing = int(mask_missing.sum())
@@ -298,6 +321,21 @@ def _check_variable(series: pd.Series, dates: pd.Series, cfg: VarConfig) -> dict
 def _cover_page(pdf: PdfPages, df: pd.DataFrame, station_info: pd.DataFrame,
                 all_checks: dict, n_gaps: int, n_dup: int,
                 figures_dir: Optional[str] = None) -> None:
+    """Write the report cover page to *pdf*.
+
+    Displays station metadata, time-series statistics, flag definitions,
+    and a per-variable quality summary table.
+
+    Args:
+        pdf (PdfPages): Open PDF backend to append the page to.
+        df (pd.DataFrame): Full dataset including the DATE column.
+        station_info (pd.DataFrame): One-row station metadata DataFrame.
+        all_checks (dict): Per-variable check results from ``_check_variable``.
+        n_gaps (int): Number of irregular time steps detected.
+        n_dup (int): Number of duplicate timestamps detected.
+        figures_dir (str, optional): If provided, the page is also saved as
+            ``{figures_dir}/cover.png`` at 150 dpi.
+    """
     fig = plt.figure(figsize=(8.27, 11.69))
     fig.patch.set_facecolor('white')
 
@@ -415,6 +453,24 @@ def _cover_page(pdf: PdfPages, df: pd.DataFrame, station_info: pd.DataFrame,
 def _variable_page(pdf: PdfPages, var: str, series: pd.Series,
                    dates: pd.Series, cfg: VarConfig, chk: dict,
                    figures_dir: Optional[str] = None) -> None:
+    """Write one per-variable quality page to *pdf*.
+
+    Layout (A4 portrait):
+    - Top: time series with colour-coded flag scatter overlay and physical bounds.
+    - Middle-left: descriptive statistics table.
+    - Middle-right: per-flag count and percentage table.
+    - Bottom: missing values per year bar chart with right-axis percentage line.
+
+    Args:
+        pdf (PdfPages): Open PDF backend to append the page to.
+        var (str): Variable code (e.g. ``'T'``, ``'FF'``).
+        series (pd.Series): Hourly observation values.
+        dates (pd.Series): Corresponding UTC timestamps.
+        cfg (VarConfig): Display label, unit, and threshold configuration.
+        chk (dict): Check results dict from ``_check_variable``.
+        figures_dir (str, optional): If provided, the page is also saved as
+            ``{figures_dir}/{var}.png`` at 150 dpi.
+    """
     fig = plt.figure(figsize=(8.27, 11.69))
     fig.patch.set_facecolor('white')
     fig.suptitle(f"{cfg.label}  ({cfg.unit})", fontsize=14, fontweight='bold', y=0.985)

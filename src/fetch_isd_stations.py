@@ -1,14 +1,16 @@
-# -*- coding: utf-8 -*-
 """
-fetch_isd_stations.py
-=====================
-Downloads the NOAA ISD station catalogue (isd-history.csv) from NCEI
-and saves it to weather_stations_infos/isd_stations.csv.
+NOAA ISD station catalogue downloader.
 
-Single HTTP request — runs in seconds.
-Re-run at any time to refresh the catalogue.
+Downloads the NOAA ISD station catalogue (``isd-history.csv``) from NCEI
+in a single HTTP request and saves it to
+``weather_stations_infos/isd_stations.csv``.
 
-Copyright 2024 Samy Kraiem — Apache License 2.0
+Run this script once before using ISDClient, or re-run at any time to
+refresh the catalogue.  Completes in a few seconds.
+
+Author:  Samy KRAIEM
+Created: 2024
+Updated: 2026
 """
 
 import io

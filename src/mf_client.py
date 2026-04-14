@@ -1,22 +1,13 @@
-# -*- coding: utf-8 -*-
 """
-Created on Wed Jan 17 17:07:52 2024
+HTTP client for the Météo-France DPClim public API (hourly data).
 
-@author: Samy-K
+Supports token-based authentication (apikey header) and OAuth2
+client-credentials flow.  On a 401 response the client automatically
+retries with a fresh OAuth2 token when an application_id is configured.
 
-Copyright 2024 Samy Kraiem
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Author:  Samy KRAIEM
+Created: 2024
+Updated: 2026
 """
 
 import logging
@@ -30,8 +21,22 @@ TOKEN_URL        = "https://portail-api.meteofrance.fr/token"
 REQUEST_INTERVAL = 0.7  # seconds between requests to stay under 100 req/min
 
 class Client(object):
+    """Météo-France DPClim API client supporting token and OAuth2 auth."""
 
     def __init__(self, api_key=None, application_id=None, base_url=None):
+        """Initialise the client and configure authentication headers.
+
+        Args:
+            api_key (str, optional): Static API token used in the
+                ``apikey`` request header.
+            application_id (str, optional): Base-64 client credentials
+                string for OAuth2 client-credentials flow.
+            base_url (str, optional): DPClim API base URL.
+
+        Raises:
+            ValueError: If neither *api_key* nor *application_id* is
+                provided.
+        """
         if not api_key and not application_id:
             raise ValueError("Either an Token or an Application ID must be provided.")
         self.base_url = base_url if base_url is not None else "DEFAULT_BASE_URL"
@@ -54,6 +59,12 @@ class Client(object):
         return response
 
     def obtain_oauth2_token(self):
+        """Fetch a fresh OAuth2 bearer token and update the session header.
+
+        Raises:
+            RuntimeError: If the token endpoint request fails or the
+                response does not contain an access_token.
+        """
         data = {'grant_type': 'client_credentials'}
         headers = {'Authorization': 'Basic ' + self.application_id}
         try:
@@ -65,8 +76,13 @@ class Client(object):
         self.session.headers.update({'Authorization': 'Bearer %s' % token})
 
     def get_stations_list(self, DEPARTEMENT):
-        """
-        Get the list of time stations for the desired department.
+        """Return the list of hourly stations for a given department.
+
+        Args:
+            DEPARTEMENT (str): French department number (e.g. ``"75"``).
+
+        Returns:
+            list: JSON list of station dicts, or None on HTTP error.
         """
         stations_url = self.base_url + "/liste-stations/horaire?id-departement=" + str(DEPARTEMENT)
         response = self.request('GET', stations_url)
@@ -77,8 +93,15 @@ class Client(object):
             return None
 
     def get_station_info(self, station_id):
-        """
-        Get information about the selected station.
+        """Retrieve metadata for a single station and return it as a DataFrame.
+
+        Args:
+            station_id (str): DPClim station identifier.
+
+        Returns:
+            pd.DataFrame: One-row DataFrame with columns ID, Nom, LieuDit,
+                Bassin, DateDebut, DateFin, Type, Altitude, Latitude,
+                Longitude.  Returns None on HTTP error.
         """
         station_info_url = self.base_url + "/information-station?id-station=" + str(station_id)
         response = self.request('GET', station_info_url)
@@ -124,6 +147,19 @@ class Client(object):
             return None
 
     def order_station_data(self, station_id, start_year, end_year):
+        """Place one data order per year and return the list of order IDs.
+
+        The DPClim API limits each order to a single calendar year, so
+        this method loops from *start_year* to *end_year* inclusive.
+
+        Args:
+            station_id (str): DPClim station identifier.
+            start_year (int): First year to order (inclusive).
+            end_year (int): Last year to order (inclusive).
+
+        Returns:
+            list: Order ID strings for successfully placed orders.
+        """
         order_ids = []
         for year in range(int(start_year), int(end_year) + 1):
             logger.info("Placing order for the year %d...", year)
@@ -142,6 +178,20 @@ class Client(object):
         return order_ids
 
     def download_command_file(self, order_ids):
+        """Poll and download the CSV file for each order ID.
+
+        Polls with up to 10 retry attempts per order:
+        - 201 — file ready, download and save as
+          ``command_{order_id}_RAW_DATA.csv``.
+        - 204 — not ready yet, wait 10 s.
+        - 429 — rate-limited, wait 60 s.
+        - 500 — server-side processing, wait 60 s.
+        - 404 / 410 / 507 — permanent failure, skip.
+
+        Args:
+            order_ids (list): Order ID strings returned by
+                order_station_data().
+        """
         for order_id in order_ids:
             url = f"{self.base_url}/commande/fichier?id-cmde={order_id}"
             ready = False

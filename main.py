@@ -1,22 +1,14 @@
-# -*- coding: utf-8 -*-
 """
-Created on Wed Jan 17 18:07:13 2024
+Entry point — orchestrates the full data acquisition and reporting workflow.
 
-@author: Samy-K
+Prompts the user to choose a data source (Météo-France DPClim or NOAA
+ISD-Lite), guides station selection, downloads data, builds a
+DatasetManager, saves the processed CSV, and generates quality-control
+and climatological factsheet PDFs.
 
-Copyright 2024 Samy Kraiem
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Author:  Samy KRAIEM
+Created: 2024
+Updated: 2026
 """
 
 import logging
@@ -68,10 +60,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def _run_meteofrance():
-    """
-    Interactive Météo-France DPClim acquisition.
-    Returns (final_dataset, station_info, B_annee, E_annee, downloaded)
-    where *downloaded* is the list of order IDs for temp-file cleanup.
+    """Run the interactive Météo-France DPClim acquisition flow.
+
+    Returns:
+        tuple: (final_dataset, station_info, B_annee, E_annee, downloaded)
+            where *downloaded* is the list of order IDs used for
+            temporary-file cleanup.  All values are None on cancellation
+            or unrecoverable error.
     """
     config = configparser.ConfigParser()
     config.read("API_config.txt")
@@ -171,10 +166,13 @@ def _run_meteofrance():
 
 
 def _run_isd():
-    """
-    Interactive NOAA ISD-Lite acquisition.
-    Returns (final_dataset, station_info, B_annee, E_annee, None)
-    (no temp files to clean up — data is kept in memory).
+    """Run the interactive NOAA ISD-Lite acquisition flow.
+
+    Returns:
+        tuple: (final_dataset, station_info, B_annee, E_annee, None).
+            The last element is always None because ISD data is kept in
+            memory and no temporary files need to be cleaned up.  All
+            values are None on cancellation or unrecoverable error.
     """
     isd = ISDClient()
 

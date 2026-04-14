@@ -1,25 +1,31 @@
-# -*- coding: utf-8 -*-
 """
-ISD Client — NOAA Integrated Surface Database (ISD-Lite)
+NOAA ISD-Lite client for downloading and parsing hourly surface data.
 
-Downloads hourly meteorological data from NCEI and builds a DatasetManager
-whose schema is compatible with the quality_report and factsheet pipeline.
+Downloads ISD-Lite files from NCEI (HTTPS) year by year and builds a
+DatasetManager compatible with the quality-report and factsheet pipeline.
 
 ISD-Lite column layout (fixed-width, space-separated):
-  1  Year                  4-digit
-  2  Month                 01-12
-  3  Day                   01-31
-  4  Hour (UTC)            00-23
-  5  Air temperature       °C x 10   (-9999 = missing)
-  6  Dew-point temperature °C x 10   (-9999 = missing)
-  7  Sea-level pressure    hPa x 10  (-9999 = missing)
-  8  Wind direction        degrees   (-9999 = missing, 0 = calm)
-  9  Wind speed            m/s x 10  (-9999 = missing)
- 10  Total sky cover       oktas 0-8 (-9999 = missing, 9 = sky obscured)
- 11  Liquid precip. 1 h    mm x 10   (-9999 = missing)
- 12  Liquid precip. 6 h    mm x 10   (-9999 = missing)
 
-Copyright 2024 Samy Kraiem — Apache License 2.0
+=====  =====================  =================  ==========================
+Col.   Variable               Unit               Missing flag
+=====  =====================  =================  ==========================
+1      Year                   4-digit            —
+2      Month                  01–12              —
+3      Day                    01–31              —
+4      Hour (UTC)             00–23              —
+5      Air temperature        °C × 10            -9999
+6      Dew-point temperature  °C × 10            -9999
+7      Sea-level pressure     hPa × 10           -9999
+8      Wind direction         degrees            -9999 (0 = calm)
+9      Wind speed             m/s × 10           -9999
+10     Total sky cover        oktas 0–8          -9999 (9 = sky obscured)
+11     Liquid precip. 1 h     mm × 10            -9999
+12     Liquid precip. 6 h     mm × 10            -9999
+=====  =====================  =================  ==========================
+
+Author:  Samy KRAIEM
+Created: 2024
+Updated: 2026
 """
 
 import gzip
@@ -46,7 +52,7 @@ _REQUEST_PAUSE   = 0.4   # seconds between yearly downloads (gentle rate-limit)
 
 
 class ISDClient:
-    """Client for NOAA ISD-Lite data (HTTPS, no FTP, no tkinter)."""
+    """Client for downloading and parsing NOAA ISD-Lite data over HTTPS."""
 
     def __init__(self):
         self._history: pd.DataFrame | None = None
@@ -56,10 +62,17 @@ class ISDClient:
     # ------------------------------------------------------------------
 
     def _load_history(self) -> pd.DataFrame:
-        """
-        Load the ISD station catalogue from the local CSV.
-        Exits with a clear message if the file is not found — run
-        fetch_isd_stations.py first to generate it.
+        """Load the ISD station catalogue from the local CSV.
+
+        Results are cached on the instance so the file is read only once.
+
+        Returns:
+            pd.DataFrame: Station catalogue with numeric LAT, LON, ELEV(M),
+                USAF, WBAN, BEGIN, and END columns.
+
+        Raises:
+            SystemExit: If isd_stations.csv is not found (run
+                fetch_isd_stations.py first).
         """
         if self._history is not None:
             return self._history
@@ -80,9 +93,16 @@ class ISDClient:
         return df
 
     def search_stations(self, query: str) -> pd.DataFrame:
-        """
-        Return stations whose name contains *query* (case-insensitive).
-        Results capped at _MAX_RESULTS to avoid unmanageable lists.
+        """Return stations whose name contains the query string.
+
+        The search is case-insensitive.  Results are capped at
+        _MAX_RESULTS (30) to avoid unmanageable lists.
+
+        Args:
+            query (str): Substring to look for in the STATION NAME column.
+
+        Returns:
+            pd.DataFrame: Matching stations (empty DataFrame if none found).
         """
         df = self._load_history()
         mask = df['STATION NAME'].str.contains(query, case=False, na=False)
