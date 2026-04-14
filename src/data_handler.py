@@ -118,6 +118,15 @@ class DatasetManager:
 
         logger.info("Subset saved as %s", file_name)
 
+    def add_quality_flags(self, all_checks: dict) -> None:
+        """
+        Add a FLAG_<VAR> column for each variable in all_checks.
+        Empty string = valid. Non-empty string = flag code(s) separated by '|'.
+        Must be called after generate_quality_pdf and before save_subset_as_csv.
+        """
+        for var, chk in all_checks.items():
+            self.data[f'FLAG_{var}'] = chk['flags'].values
+
     @staticmethod
     def delete_temporary_csvs(order_ids):
         """

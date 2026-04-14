@@ -10,6 +10,12 @@ Checks per variable:
   - Constant plateaus (PLATEAU)
   - Contextual outliers by (month, hour) via 3xIQR (CONTEXTUAL)
 
+Cross-variable coherence checks (dedicated page):
+  - TD > T  (dew point above air temperature)
+  - GLO > DIR + DIF + 20 W/m²  (radiation balance violation)
+  - RR1 > 0 with U = 0  (precipitation with zero humidity)
+  - GLO > 5 W/m² during astronomical night  (requires station lat/lon)
+
 Global checks (cover page):
   - Temporal continuity (gaps in the time index)
   - Duplicate timestamps
@@ -27,7 +33,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
 
-from src.utils import style_table as _style_table
+from src.utils import style_table as _style_table, solar_elevation_vec
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +79,141 @@ _FLAG_BG = {
     'CONTEXTUAL': '#ead7ff',
     'TOTAL':      '#fff3b0',
 }
+
+# ── Cross-variable coherence checks ───────────────────────────────────────
+
+def _check_coherence(df: pd.DataFrame, dates: pd.Series,
+                     station_info: pd.DataFrame) -> dict:
+    """
+    Physical coherence checks between pairs of variables.
+    Returns {check_id: {'n', 'mask', 'description', 'variables'}}.
+    """
+    results = {}
+
+    # 1. TD > T — dew point above air temperature (thermodynamically impossible)
+    if 'T' in df.columns and 'TD' in df.columns:
+        valid = df['T'].notna() & df['TD'].notna()
+        mask  = valid & (df['TD'] > df['T'])
+        results['TD_gt_T'] = {
+            'n':           int(mask.sum()),
+            'mask':        mask,
+            'description': 'Dew point (TD) > Air temperature (T) — thermodynamically impossible',
+            'variables':   'TD, T',
+        }
+
+    # 2. GLO > DIR + DIF + 20 W/m² tolerance — radiation balance violation
+    if all(c in df.columns for c in ['GLO', 'DIR', 'DIF']):
+        valid = df['GLO'].notna() & df['DIR'].notna() & df['DIF'].notna()
+        mask  = valid & (df['GLO'] > df['DIR'] + df['DIF'] + 20)
+        results['GLO_gt_DIR_DIF'] = {
+            'n':           int(mask.sum()),
+            'mask':        mask,
+            'description': 'Global radiation (GLO) > Direct (DIR) + Diffuse (DIF) + 20 W/m²',
+            'variables':   'GLO, DIR, DIF',
+        }
+
+    # 3. RR1 > 0 with U = 0 — precipitation recorded with zero relative humidity
+    if 'RR1' in df.columns and 'U' in df.columns:
+        valid = df['RR1'].notna() & df['U'].notna()
+        mask  = valid & (df['RR1'] > 0) & (df['U'] == 0)
+        results['RR1_U0'] = {
+            'n':           int(mask.sum()),
+            'mask':        mask,
+            'description': 'Precipitation (RR1 > 0 mm) with zero relative humidity (U = 0 %)',
+            'variables':   'RR1, U',
+        }
+
+    # 4. GLO > 5 W/m² during astronomical night (requires station coordinates)
+    if 'GLO' in df.columns:
+        try:
+            lat = float(station_info.iloc[0].get('Latitude',  float('nan')))
+            lon = float(station_info.iloc[0].get('Longitude', float('nan')))
+            if not (np.isnan(lat) or np.isnan(lon)):
+                elev  = solar_elevation_vec(lat, lon, pd.DatetimeIndex(dates))
+                night = elev < -0.833   # below standard astronomical horizon
+                mask  = df['GLO'].notna() & night & (df['GLO'] > 5)
+                results['GLO_night'] = {
+                    'n':           int(mask.sum()),
+                    'mask':        mask,
+                    'description': 'Global radiation (GLO > 5 W/m²) during astronomical night',
+                    'variables':   'GLO',
+                }
+        except Exception:
+            pass
+
+    return results
+
+
+def _coherence_page(pdf: PdfPages, coherence_results: dict,
+                    dates: pd.Series, n_total: int,
+                    figures_dir: Optional[str] = None) -> None:
+    """Dedicated page for cross-variable coherence check results."""
+    fig = plt.figure(figsize=(8.27, 11.69))
+    fig.patch.set_facecolor('white')
+    fig.text(0.5, 0.984, 'Cross-Variable Coherence Checks',
+             ha='center', fontsize=14, fontweight='bold')
+    fig.text(0.5, 0.963, 'Physical consistency checks between pairs of variables',
+             ha='center', fontsize=10, color='#555555')
+
+    # ── Summary table ────────────────────────────────────────────────────────
+    fig.text(0.06, 0.942, 'Summary', fontsize=10, fontweight='bold', color='#2c3e50')
+    ax_tbl = fig.add_axes([0.06, 0.845, 0.88, 0.090])
+    ax_tbl.axis('off')
+    rows = []
+    for chk in coherence_results.values():
+        pct = 100 * chk['n'] / n_total if n_total else 0.0
+        rows.append([chk['variables'], chk['description'],
+                     f"{chk['n']:,}", f"{pct:.3f} %"])
+    tbl = ax_tbl.table(
+        cellText=rows,
+        colLabels=['Variables', 'Check', 'Incidents', '% of record'],
+        bbox=[0, 0, 1, 1], cellLoc='left',
+        colWidths=[0.10, 0.62, 0.12, 0.16],
+    )
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(7.5)
+    tbl.scale(1, 1.35)
+    for (r, _), cell in tbl.get_celld().items():
+        cell.set_edgecolor('white')
+        if r == 0:
+            cell.set_facecolor('#2c3e50')
+            cell.set_text_props(color='white', fontweight='bold')
+        elif r % 2 == 0:
+            cell.set_facecolor('#ecf0f1')
+
+    # ── Per-check annual bar charts ───────────────────────────────────────────
+    active = [(k, v) for k, v in coherence_results.items() if v['n'] > 0]
+
+    if not active:
+        fig.text(0.5, 0.45, 'No coherence issues detected.',
+                 ha='center', fontsize=14, color='#27ae60', fontweight='bold')
+        pdf.savefig(fig, bbox_inches='tight')
+        plt.close(fig)
+        return
+
+    n   = len(active)
+    top = 0.825
+    h   = (top - 0.04) / n
+
+    for i, (_, chk) in enumerate(active):
+        ax = fig.add_axes([0.09, top - (i + 1) * h + 0.015, 0.87, h - 0.035])
+        year   = dates.dt.year
+        cnt_yr = chk['mask'].groupby(year).sum()
+        ax.bar(cnt_yr.index, cnt_yr.values,
+               color='#e74c3c', edgecolor='white', linewidth=0.5, alpha=0.85)
+        ax.set_title(chk['description'], fontsize=8, fontweight='bold',
+                     loc='left', pad=3)
+        ax.set_ylabel('Incidents / year', fontsize=7)
+        ax.tick_params(labelsize=7)
+        ax.grid(axis='y', alpha=0.25)
+        ax.set_axisbelow(True)
+
+    pdf.savefig(fig, bbox_inches='tight')
+    if figures_dir:
+        fig.savefig(os.path.join(figures_dir, 'coherence.png'),
+                    bbox_inches='tight', dpi=150)
+    plt.close(fig)
+
 
 # ── Core check per variable ────────────────────────────────────────────────
 
@@ -403,11 +544,12 @@ def _variable_page(pdf: PdfPages, var: str, series: pd.Series,
 # ── Public entry point ─────────────────────────────────────────────────────
 
 def generate_quality_pdf(dataset_manager, station_info: pd.DataFrame,
-                         output_dir: str = "out") -> str:
+                         output_dir: str = "out") -> dict:
     """
     Run quality checks on all variables present in dataset_manager.data
     and write quality_checks.pdf to output_dir.
-    Returns the path to the generated PDF, or empty string on failure.
+    Returns all_checks dict (var -> check results) so callers can attach
+    flags to the dataset before saving the CSV.
     """
     df    = dataset_manager.data
     dates = df['DATE']
@@ -436,7 +578,13 @@ def generate_quality_pdf(dataset_manager, station_info: pd.DataFrame,
 
     if not all_checks:
         logger.warning("No recognised variables found — quality PDF not generated.")
-        return ""
+        return {}
+
+    # Cross-variable coherence checks
+    coherence_results = _check_coherence(df, dates, station_info)
+    for key, chk in coherence_results.items():
+        if chk['n']:
+            logger.info("Coherence %-14s | incidents=%d", key, chk['n'])
 
     os.makedirs(output_dir, exist_ok=True)
     figures_dir = os.path.join(output_dir, 'figures')
@@ -445,8 +593,9 @@ def generate_quality_pdf(dataset_manager, station_info: pd.DataFrame,
 
     with PdfPages(out_path) as pdf:
         _cover_page(pdf, df, station_info, all_checks, n_gaps, n_dup, figures_dir=figures_dir)
+        _coherence_page(pdf, coherence_results, dates, len(df), figures_dir=figures_dir)
         for var, chk in all_checks.items():
             _variable_page(pdf, var, df[var], dates, VARIABLES[var], chk, figures_dir=figures_dir)
 
     logger.info("Quality report saved: %s", out_path)
-    return out_path
+    return all_checks

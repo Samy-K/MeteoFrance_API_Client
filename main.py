@@ -281,6 +281,10 @@ def main():
     )
     output_dir = f"out_{str(station_info.iloc[0]['ID'])}_{nom_normalise}"
 
+    # --- Reports (QC first — flags are attached before CSV is written) ------
+    all_checks = generate_quality_pdf(final_dataset, station_info, output_dir=output_dir)
+    final_dataset.add_quality_flags(all_checks)
+
     final_dataset.save_subset_as_csv(
         station_name=str(station_info.iloc[0]['ID']) + '_' + nom_normalise,
         start_year=B_annee,
@@ -289,8 +293,6 @@ def main():
         output_dir=output_dir,
     )
 
-    # --- Reports ------------------------------------------------------------
-    generate_quality_pdf(final_dataset, station_info, output_dir=output_dir)
     generate_factsheet_pdf(final_dataset, station_info, output_dir=output_dir)
 
     # --- Cleanup (Météo-France temp files only) -----------------------------

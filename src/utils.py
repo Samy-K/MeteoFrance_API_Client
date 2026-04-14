@@ -49,6 +49,28 @@ def mann_kendall(y) -> Tuple[float, float, float, float]:
     return tau, p, sen, intercept
 
 
+def solar_elevation_vec(lat_deg: float, lon_deg: float,
+                        dti: 'pd.DatetimeIndex') -> 'np.ndarray':
+    """
+    Vectorized solar elevation angle (degrees) for each UTC timestamp in dti.
+    Uses simplified solar geometry (±0.5° accuracy — sufficient for day/night detection).
+    """
+    doy      = dti.dayofyear.values.astype(float)
+    hour_utc = dti.hour.values + dti.minute.values / 60.0
+
+    decl = np.radians(23.45 * np.sin(np.radians(360.0 * (284.0 + doy) / 365.0)))
+    B    = np.radians(360.0 * (doy - 81.0) / 364.0)
+    eot  = 9.87 * np.sin(2 * B) - 7.53 * np.cos(B) - 1.5 * np.sin(B)  # minutes
+
+    solar_time = hour_utc + lon_deg / 15.0 + eot / 60.0
+    hour_angle = np.radians(15.0 * (solar_time - 12.0))
+
+    lat      = math.radians(lat_deg)
+    sin_elev = (math.sin(lat) * np.sin(decl) +
+                math.cos(lat) * np.cos(decl) * np.cos(hour_angle))
+    return np.degrees(np.arcsin(np.clip(sin_elev, -1.0, 1.0)))
+
+
 def parse_coord(s: str) -> float:
     """
     Parse a coordinate string in decimal or cardinal-degree notation.

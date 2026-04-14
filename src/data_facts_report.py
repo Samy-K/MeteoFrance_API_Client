@@ -49,6 +49,15 @@ _SEASON_COLORS = {
     'SON': '#8e44ad',
 }
 
+# (variable, operator, threshold, label, y-axis unit)
+_THRESHOLDS = [
+    ('T',   '>',  25.0, 'Summer hours  (T > 25 °C)',         'h / yr'),
+    ('T',   '>',  35.0, 'Heat-wave hours  (T > 35 °C)',      'h / yr'),
+    ('T',   '<',   0.0, 'Frost hours  (T < 0 °C)',           'h / yr'),
+    ('RR1', '>',   1.0, 'Rainy hours  (RR1 > 1 mm)',         'h / yr'),
+    ('FF',  '>',  10.0, 'Strong-wind hours  (FF > 10 m/s)',  'h / yr'),
+]
+
 
 def _mk_text(tau: float, p: float, slope: float, unit: str) -> str:
     if any(np.isnan(v) for v in [tau, p, slope]):
@@ -101,7 +110,7 @@ def _grp_month(series: pd.Series, dti: pd.DatetimeIndex) -> pd.core.groupby.Seri
     return tmp.groupby('m')['v']
 
 
-def _trend_ax(ax, ann: pd.Series, tau, p, slope, intercept, unit: str):
+def _trend_ax(ax, ann: pd.Series, p, slope, intercept, unit: str):
     years = ann.index.year.values
     vals  = ann.values
     ax.scatter(years, vals, color='#2c3e50', s=20, zorder=3, alpha=0.85)
@@ -390,7 +399,7 @@ def _page_temperature(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
     ax_t = fig.add_subplot(gs[1, 1])
     ann  = _annual_agg(T, dti, 'mean')
     tau, p, slope, intercept = _mann_kendall(ann.values)
-    _trend_ax(ax_t, ann, tau, p, slope, intercept, '°C')
+    _trend_ax(ax_t, ann, p, slope, intercept, '°C')
     _mk_box(ax_t, _mk_text(tau, p, slope, '°C'), p)
     ax_t.set_title('Annual Mean Temperature + Trend', fontsize=9,
                    fontweight='bold', loc='left', pad=3)
@@ -475,7 +484,7 @@ def _page_humidity(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
     ax_t = fig.add_subplot(gs[1, 1])
     ann  = _annual_agg(primary, dti, 'mean')
     tau, p, slope, intercept = _mann_kendall(ann.values)
-    _trend_ax(ax_t, ann, tau, p, slope, intercept, unit_p)
+    _trend_ax(ax_t, ann, p, slope, intercept, unit_p)
     _mk_box(ax_t, _mk_text(tau, p, slope, unit_p), p)
     ax_t.set_title('Annual Mean + Trend', fontsize=9,
                    fontweight='bold', loc='left', pad=3)
@@ -542,7 +551,7 @@ def _page_pressure(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
     ax_t = fig.add_subplot(gs[1, 1])
     ann  = _annual_agg(P, dti, 'mean')
     tau, p_mk, slope, intercept = _mann_kendall(ann.values)
-    _trend_ax(ax_t, ann, tau, p_mk, slope, intercept, 'hPa')
+    _trend_ax(ax_t, ann, p_mk, slope, intercept, 'hPa')
     _mk_box(ax_t, _mk_text(tau, p_mk, slope, 'hPa'), p_mk)
     ax_t.set_title('Annual Mean Pressure + Trend', fontsize=9,
                    fontweight='bold', loc='left', pad=3)
@@ -614,7 +623,7 @@ def _page_wind(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
     ax_t = fig.add_subplot(gs[1, :])
     ann  = _annual_agg(FF, dti, 'mean')
     tau, p_mk, slope, intercept = _mann_kendall(ann.values)
-    _trend_ax(ax_t, ann, tau, p_mk, slope, intercept, 'm/s')
+    _trend_ax(ax_t, ann, p_mk, slope, intercept, 'm/s')
     _mk_box(ax_t, _mk_text(tau, p_mk, slope, 'm/s'), p_mk)
     ax_t.set_title('Annual Mean Wind Speed + Trend', fontsize=9,
                    fontweight='bold', loc='left', pad=3)
@@ -649,7 +658,7 @@ def _page_wind(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
 # Radiation page
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _page_radiation(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
+def _page_radiation(pdf: PdfPages, df: pd.DataFrame,
                     dti: pd.DatetimeIndex,
                     figures_dir: Optional[str] = None) -> None:
     rad_vars = {v: l for v, l in [('GLO', 'Global'), ('DIR', 'Direct'),
@@ -717,7 +726,7 @@ def _page_radiation(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
     ax_t = fig.add_subplot(gs[2])
     ann  = _annual_agg(df[best], dti, 'mean')
     tau, p_mk, slope, intercept = _mann_kendall(ann.values)
-    _trend_ax(ax_t, ann, tau, p_mk, slope, intercept, 'W/m²')
+    _trend_ax(ax_t, ann, p_mk, slope, intercept, 'W/m²')
     _mk_box(ax_t, _mk_text(tau, p_mk, slope, 'W/m²'), p_mk)
     ax_t.set_title(f'Annual Mean {rad_vars[best]} Radiation + Trend',
                    fontsize=9, fontweight='bold', loc='left', pad=3)
@@ -758,8 +767,8 @@ def _page_precipitation(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
     sd_m  = clim.std()
     p75_m = clim.quantile(0.75)
     x     = np.arange(1, 13)
-    bars  = ax_c.bar(x, mu_m.values, color='#2980b9', edgecolor='white',
-                     linewidth=0.5, alpha=0.85, label='Mean monthly total')
+    ax_c.bar(x, mu_m.values, color='#2980b9', edgecolor='white',
+             linewidth=0.5, alpha=0.85, label='Mean monthly total')
     ax_c.errorbar(x, mu_m.values, yerr=sd_m.values, fmt='none',
                   color='#1a5276', capsize=4, lw=1.2, label='±1 σ')
     ax_c.plot(x, p75_m.values, color='#e74c3c', lw=1.5, ls='--',
@@ -777,7 +786,7 @@ def _page_precipitation(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
     ax_t = fig.add_subplot(gs[1])
     ann  = _annual_agg(RR, dti, 'sum')
     tau, p_mk, slope, intercept = _mann_kendall(ann.values)
-    _trend_ax(ax_t, ann, tau, p_mk, slope, intercept, 'mm')
+    _trend_ax(ax_t, ann, p_mk, slope, intercept, 'mm')
     _mk_box(ax_t, _mk_text(tau, p_mk, slope, 'mm'), p_mk)
     ax_t.set_title('Annual Total Precipitation + Trend',
                    fontsize=9, fontweight='bold', loc='left', pad=3)
@@ -807,7 +816,7 @@ def _page_precipitation(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
 # Cloud cover page
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _page_cloudcover(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
+def _page_cloudcover(pdf: PdfPages, df: pd.DataFrame,
                      dti: pd.DatetimeIndex,
                      figures_dir: Optional[str] = None) -> None:
     if 'N' not in df.columns or not df['N'].notna().any():
@@ -866,7 +875,7 @@ def _page_cloudcover(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
     ax_t = fig.add_subplot(gs[1])
     ann  = _annual_agg(N, dti, 'mean')
     tau, p_mk, slope, intercept = _mann_kendall(ann.values)
-    _trend_ax(ax_t, ann, tau, p_mk, slope, intercept, 'oktas')
+    _trend_ax(ax_t, ann, p_mk, slope, intercept, 'oktas')
     _mk_box(ax_t, _mk_text(tau, p_mk, slope, 'oktas'), p_mk)
     ax_t.set_title('Annual Mean Cloud Cover + Trend', fontsize=9,
                    fontweight='bold', loc='left', pad=3)
@@ -874,6 +883,56 @@ def _page_cloudcover(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
     pdf.savefig(fig, bbox_inches='tight')
     if figures_dir:
         fig.savefig(os.path.join(figures_dir, 'factsheet_cloudcover.png'),
+                    dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+
+def _page_thresholds(pdf: PdfPages, df: pd.DataFrame,
+                     dti: pd.DatetimeIndex,
+                     figures_dir: Optional[str] = None) -> None:
+    """Annual threshold-exceedance counts for key climate indicators."""
+    active = []
+    for var, op, thr, label, unit in _THRESHOLDS:
+        if var not in df.columns or df[var].isna().all():
+            continue
+        mask = (df[var] > thr) if op == '>' else (df[var] < thr)
+        mask = mask & df[var].notna()
+        ann  = mask.groupby(dti.year).sum().astype(int)
+        if ann.sum() == 0:
+            continue
+        tau, p, slope, intercept = _mann_kendall(ann.values)
+        active.append((label, ann, tau, p, slope, intercept, unit))
+
+    if not active:
+        return
+
+    n    = len(active)
+    fig, axes = plt.subplots(n, 1, figsize=(8.27, 11.69),
+                             gridspec_kw={'hspace': 0.60})
+    fig.patch.set_facecolor('white')
+    fig.suptitle('Threshold Exceedance Statistics', fontsize=14,
+                 fontweight='bold', y=0.997)
+    if n == 1:
+        axes = [axes]
+
+    for ax, (label, ann, tau, p, slope, intercept, unit) in zip(axes, active):
+        years = ann.index.astype(int)
+        ax.bar(years, ann.values, color='#4C72B0', edgecolor='white',
+               linewidth=0.5, alpha=0.85, zorder=3)
+        if not np.isnan(slope):
+            c = '#c0392b' if (not np.isnan(p) and p < 0.05) else '#7f8c8d'
+            ax.plot(years, slope * np.arange(len(years)) + intercept,
+                    color=c, lw=2.0, ls='--', zorder=4)
+        _mk_box(ax, _mk_text(tau, p, slope, unit), p)
+        ax.set_title(label, fontsize=9, fontweight='bold', loc='left')
+        ax.set_ylabel('Hours / year', fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.grid(axis='y', alpha=0.25)
+        ax.set_axisbelow(True)
+
+    pdf.savefig(fig, bbox_inches='tight')
+    if figures_dir:
+        fig.savefig(os.path.join(figures_dir, 'factsheet_thresholds.png'),
                     dpi=150, bbox_inches='tight')
     plt.close(fig)
 
@@ -911,9 +970,10 @@ def generate_factsheet_pdf(dataset_manager, station_info: pd.DataFrame,
         _page_humidity(pdf, df, dates, dti, figures_dir)
         _page_pressure(pdf, df, dates, dti, figures_dir)
         _page_wind(pdf, df, dates, dti, figures_dir)
-        _page_radiation(pdf, df, dates, dti, figures_dir)
+        _page_radiation(pdf, df, dti, figures_dir)
         _page_precipitation(pdf, df, dates, dti, figures_dir)
-        _page_cloudcover(pdf, df, dates, dti, figures_dir)
+        _page_cloudcover(pdf, df, dti, figures_dir)
+        _page_thresholds(pdf, df, dti, figures_dir)
 
     logger.info("Factsheet saved: %s", out_path)
     return out_path
