@@ -76,18 +76,6 @@ class Client(object):
             logger.error("get_stations_list() : Unexpected status code %s: %s", response.status_code, response.text)
             return None
 
-    def select_station(self, stations):
-        """Allows the user to select a weather station."""
-        logger.info("Stations available for the department (ID : NAME) :")
-        valid_ids = {str(station['id']) for station in stations}
-        for station in stations:
-            logger.info("  %s : %s", station['id'], station['nom'])
-        selected_id = input("\nEnter wanted station ID : ").strip()
-        while selected_id not in valid_ids:
-            logger.warning("ID '%s' not in the list. Please try again.", selected_id)
-            selected_id = input("Enter wanted station ID : ").strip()
-        return selected_id
-
     def get_station_info(self, station_id):
         """
         Get information about the selected station.

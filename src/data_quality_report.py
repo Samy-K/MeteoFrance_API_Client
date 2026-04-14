@@ -27,6 +27,8 @@ import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
 
+from src.utils import style_table as _style_table
+
 logger = logging.getLogger(__name__)
 
 # ── Variable configurations ────────────────────────────────────────────────
@@ -148,21 +150,6 @@ def _check_variable(series: pd.Series, dates: pd.Series, cfg: VarConfig) -> dict
         'mask_flat':    mask_flat,
         'mask_ctx':     mask_ctx,
     }
-
-
-# ── Table style helper ─────────────────────────────────────────────────────
-
-def _style_table(tbl, header_color='#2c3e50', stripe_color='#ecf0f1'):
-    tbl.auto_set_font_size(False)
-    tbl.set_fontsize(8)
-    tbl.scale(1, 1.35)
-    for (r, c), cell in tbl.get_celld().items():
-        cell.set_edgecolor('white')
-        if r == 0:
-            cell.set_facecolor(header_color)
-            cell.set_text_props(color='white', fontweight='bold')
-        elif r % 2 == 0:
-            cell.set_facecolor(stripe_color)
 
 
 # ── Cover page ─────────────────────────────────────────────────────────────

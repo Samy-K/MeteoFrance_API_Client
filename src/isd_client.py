@@ -122,42 +122,6 @@ class ISDClient:
             .reset_index(drop=True)
         )
 
-    def select_station(self, stations: pd.DataFrame) -> pd.Series:
-        """Interactive CLI station selection. Returns the chosen row as a Series."""
-        if stations.empty:
-            raise ValueError("Empty station list — nothing to select.")
-
-        has_dist = 'distance_km' in stations.columns
-        print()
-        for idx, row in stations.iterrows():
-            b = str(int(row['BEGIN']))[:4] if pd.notna(row['BEGIN']) else '?'
-            e = str(int(row['END']))[:4]   if pd.notna(row['END'])   else '?'
-            dist_str = f"  {row['distance_km']:>7.1f} km" if has_dist else ""
-            print(
-                f"  [{idx:>2}]  {str(row['STATION NAME']):<42}  {str(row['CTRY']):<4}"
-                f"  lat {row['LAT']:>7.3f}  lon {row['LON']:>8.3f}"
-                f"  alt {row['ELEV(M)']:>6.1f} m  {b}–{e}{dist_str}"
-            )
-
-        if len(stations) == 1:
-            logger.info("Single match — auto-selected.")
-            return stations.iloc[0]
-
-        valid = list(stations.index)
-        while True:
-            raw = input(f"\nSelect station index (0–{valid[-1]}): ").strip()
-            try:
-                idx = int(raw)
-                if idx in valid:
-                    break
-            except ValueError:
-                pass
-            print("  Invalid index, please retry.")
-
-        selected = stations.loc[idx]
-        logger.info("Selected: %s  (%s)", selected['STATION NAME'], selected['CTRY'])
-        return selected
-
     def get_station_info(self, station: pd.Series) -> pd.DataFrame:
         """
         Build a station_info DataFrame with the same column schema used by

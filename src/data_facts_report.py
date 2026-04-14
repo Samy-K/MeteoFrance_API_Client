@@ -17,10 +17,9 @@ A warning is emitted if the record is shorter than MIN_YEARS_WARNING years.
 """
 
 import logging
-import math
 import os
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -28,6 +27,8 @@ import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Patch
+
+from src.utils import mann_kendall as _mann_kendall, style_table as _style_table
 
 logger = logging.getLogger(__name__)
 
@@ -49,50 +50,6 @@ _SEASON_COLORS = {
 }
 
 
-# ── Mann-Kendall (no external dependencies) ────────────────────────────────────
-
-def _norm_cdf(x: float) -> float:
-    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
-
-
-def _mann_kendall(y) -> Tuple[float, float, float, float]:
-    """
-    Mann-Kendall trend test + Theil-Sen estimator on an annual series.
-    Returns (tau, p_value, sen_slope_per_year, sen_intercept).
-    Ties correction omitted — negligible on annual climate series.
-    """
-    y = np.asarray(y, dtype=float)
-    y = y[~np.isnan(y)]
-    n = len(y)
-    if n < 4:
-        return np.nan, np.nan, np.nan, np.nan
-
-    s = 0
-    for i in range(n - 1):
-        for j in range(i + 1, n):
-            d = y[j] - y[i]
-            s += 1 if d > 0 else (-1 if d < 0 else 0)
-
-    var_s = n * (n - 1) * (2 * n + 5) / 18.0
-    if s > 0:
-        z = (s - 1) / math.sqrt(var_s)
-    elif s < 0:
-        z = (s + 1) / math.sqrt(var_s)
-    else:
-        z = 0.0
-
-    p   = 2.0 * (1.0 - _norm_cdf(abs(z)))
-    tau = s / (n * (n - 1) / 2.0)
-
-    slopes = [
-        (y[j] - y[i]) / (j - i)
-        for i in range(n - 1) for j in range(i + 1, n)
-    ]
-    sen       = float(np.median(slopes))
-    intercept = float(np.median(y) - sen * np.median(np.arange(n)))
-    return tau, p, sen, intercept
-
-
 def _mk_text(tau: float, p: float, slope: float, unit: str) -> str:
     if any(np.isnan(v) for v in [tau, p, slope]):
         return "Mann-Kendall: insufficient data (< 4 years)"
@@ -102,21 +59,6 @@ def _mk_text(tau: float, p: float, slope: float, unit: str) -> str:
         f"Mann-Kendall   τ = {tau:.3f}    {sig}\n"
         f"Theil-Sen slope:  {arrow} {abs(slope * 10):.4f} {unit}/decade"
     )
-
-
-# ── Style helpers ──────────────────────────────────────────────────────────────
-
-def _style_table(tbl, header_color: str = '#2c3e50', stripe: str = '#ecf0f1'):
-    tbl.auto_set_font_size(False)
-    tbl.set_fontsize(7.5)
-    tbl.scale(1, 1.4)
-    for (r, c), cell in tbl.get_celld().items():
-        cell.set_edgecolor('white')
-        if r == 0:
-            cell.set_facecolor(header_color)
-            cell.set_text_props(color='white', fontweight='bold')
-        elif r % 2 == 0:
-            cell.set_facecolor(stripe)
 
 
 def _mk_box(ax, text: str, p: float):
