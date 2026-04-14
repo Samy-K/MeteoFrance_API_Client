@@ -12,3 +12,9 @@ RAW_DATA_*.csv
 
 # Credentials
 API_config.txt
+
+# Scripts archivés
+old_script.py
+
+# Catalogues de stations (générés — ne pas versionner)
+weather_stations_infos/

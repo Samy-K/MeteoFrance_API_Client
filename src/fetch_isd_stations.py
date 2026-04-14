@@ -1,0 +1,53 @@
+# -*- coding: utf-8 -*-
+"""
+fetch_isd_stations.py
+=====================
+Downloads the NOAA ISD station catalogue (isd-history.csv) from NCEI
+and saves it to weather_stations_infos/isd_stations.csv.
+
+Single HTTP request — runs in seconds.
+Re-run at any time to refresh the catalogue.
+
+Copyright 2024 Samy Kraiem — Apache License 2.0
+"""
+
+import io
+import logging
+import os
+
+import pandas as pd
+import requests
+
+OUTPUT_DIR  = "weather_stations_infos"
+OUTPUT_CSV  = os.path.join(OUTPUT_DIR, "isd_stations.csv")
+SOURCE_URL  = "https://www.ncei.noaa.gov/pub/data/noaa/isd-history.csv"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)-8s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+)
+logger = logging.getLogger(__name__)
+
+
+def main():
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    logger.info("Downloading ISD station catalogue from NCEI …")
+    r = requests.get(SOURCE_URL, timeout=90)
+    r.raise_for_status()
+
+    df = pd.read_csv(io.StringIO(r.text))
+    df.columns = [c.strip() for c in df.columns]
+
+    for col in ('LAT', 'LON', 'ELEV(M)'):
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    for col in ('USAF', 'WBAN', 'BEGIN', 'END'):
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    df.to_csv(OUTPUT_CSV, index=False, encoding='utf-8')
+    logger.info("Saved %d stations → %s", len(df), OUTPUT_CSV)
+
+
+if __name__ == '__main__':
+    main()

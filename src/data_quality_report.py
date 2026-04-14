@@ -1,5 +1,5 @@
 """
-Quality control report generator – MeteoFrance hourly data.
+Quality control report generator - MeteoFrance hourly data.
 Outputs quality_checks.pdf in the specified output directory.
 Individual figures are also saved as PNG in output_dir/figures/.
 
@@ -8,7 +8,7 @@ Checks per variable:
   - Physical range (ABSURD)
   - Temporal jumps (JUMP)
   - Constant plateaus (PLATEAU)
-  - Contextual outliers by (month, hour) via 3×IQR (CONTEXTUAL)
+  - Contextual outliers by (month, hour) via 3xIQR (CONTEXTUAL)
 
 Global checks (cover page):
   - Temporal continuity (gaps in the time index)

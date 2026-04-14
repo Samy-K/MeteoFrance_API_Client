@@ -1,6 +1,6 @@
 """
 =============================================================================
-  Analyse de qualité et statistiques – Température à 2m
+  Analyse de qualité et statistiques - Température à 2m
 =============================================================================
   • Contrôle qualité : valeurs manquantes, doublons, valeurs absurdes,
     cohérence temporelle (sauts entre pas de temps).
