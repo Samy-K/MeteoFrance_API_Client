@@ -232,8 +232,8 @@ API_config.txt / isd_stations.csv / mf_stations.csv
 | `FF` | Wind speed | m/s |
 | `RR1` | Hourly precipitation | mm |
 
-Full field documentation:
-<https://donneespubliques.meteofrance.fr/client/document/api_clim_table_parametres_horaires_20240103_352.csv>
+Full field documentation: <https://portail-api.meteofrance.fr/web/en/>
+
 
 ### NOAA ISD-Lite — variables available
 
