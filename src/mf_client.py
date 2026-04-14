@@ -11,14 +11,54 @@ Updated: 2026
 """
 
 import logging
-import requests
+import math
 import time
+from datetime import datetime, timezone
+
 import pandas as pd
+import requests
 
 logger = logging.getLogger(__name__)
 
 TOKEN_URL        = "https://portail-api.meteofrance.fr/token"
 REQUEST_INTERVAL = 0.7  # seconds between requests to stay under 100 req/min
+
+
+def _parse_retry_wait(response: requests.Response, default: int = 65) -> int:
+    """Return how many seconds to wait after a 429 response.
+
+    Tries to read ``nextAccessTime`` from the JSON body and compute the
+    exact delay.  Falls back to *default* seconds if parsing fails.
+
+    Args:
+        response: The 429 HTTP response from the API.
+        default:  Fallback wait time in seconds.
+
+    Returns:
+        int: Number of seconds to sleep before the next attempt.
+    """
+    try:
+        next_access = response.json().get('nextAccessTime', '')
+        # Format observed: "2026-avr.-14 23:21:06+0000 UTC"
+        # Strip the trailing " UTC" and parse the ISO-like prefix.
+        clean = next_access.replace(' UTC', '').strip()
+        # Replace French abbreviated months with numbers so strptime works.
+        _FR_MONTHS = {
+            'janv.': '01', 'févr.': '02', 'mars':  '03', 'avr.':  '04',
+            'mai':   '05', 'juin':  '06', 'juil.': '07', 'août':  '08',
+            'sept.': '09', 'oct.':  '10', 'nov.':  '11', 'déc.':  '12',
+        }
+        for fr, num in _FR_MONTHS.items():
+            clean = clean.replace(fr, num)
+        # Expected after replacement: "2026-04-14 23:21:06+0000"
+        dt = datetime.strptime(clean, '%Y-%m-%d %H:%M:%S%z')
+        wait = math.ceil((dt - datetime.now(timezone.utc)).total_seconds()) + 2
+        if wait > 0:
+            logger.info("Rate-limit window ends at %s — waiting %ds.", dt.isoformat(), wait)
+            return wait
+    except Exception:
+        pass
+    return default
 
 class Client(object):
     """Météo-France DPClim API client supporting token and OAuth2 auth."""
@@ -160,21 +200,59 @@ class Client(object):
         Returns:
             list: Order ID strings for successfully placed orders.
         """
-        order_ids = []
+        order_ids  = []
+        max_retries = 5
+        order_url_tmpl = (
+            self.base_url
+            + "/commande-station/horaire"
+            + "?id-station={sid}"
+            + "&date-deb-periode={y}-01-01T00%3A00%3A00Z"
+            + "&date-fin-periode={y}-12-31T23%3A00%3A00Z"
+        )
+
         for year in range(int(start_year), int(end_year) + 1):
-            logger.info("Placing order for the year %d...", year)
-            order_url = self.base_url + f"/commande-station/horaire?id-station={station_id}&date-deb-periode={year}-01-01T00%3A00%3A00Z&date-fin-periode={year}-12-31T23%3A00%3A00Z"
-            response = self.request('GET', order_url)
-            time.sleep(REQUEST_INTERVAL)
-            if response.status_code == 202:
-                try:
-                    response_json = response.json()
-                    order_id = response_json['elaboreProduitAvecDemandeResponse']['return']
-                    order_ids.append(order_id)
-                except (ValueError, KeyError):
-                    logger.error("Error extracting 'order_id' for the year %d.", year)
-            else:
-                logger.error("Unexpected status code %s for the year %d: %s", response.status_code, year, response.text)
+            url = order_url_tmpl.format(sid=station_id, y=year)
+
+            for attempt in range(1, max_retries + 1):
+                if attempt == 1:
+                    logger.info("Placing order for the year %d…", year)
+                else:
+                    logger.info("Placing order for the year %d — retry %d/%d…",
+                                year, attempt, max_retries)
+                response = self.request('GET', url)
+                time.sleep(REQUEST_INTERVAL)
+
+                if response.status_code == 202:
+                    try:
+                        order_id = response.json()[
+                            'elaboreProduitAvecDemandeResponse']['return']
+                        order_ids.append(order_id)
+                        logger.info("Year %d — order placed: %s", year, order_id)
+                    except (ValueError, KeyError):
+                        logger.error("Year %d — could not extract order ID from response.",
+                                     year)
+                    break  # success or unrecoverable parse error — move to next year
+
+                elif response.status_code == 429:
+                    wait = _parse_retry_wait(response, default=65)
+                    if attempt < max_retries:
+                        logger.warning(
+                            "Year %d — rate limited (429), attempt %d/%d, "
+                            "waiting %ds before retry.",
+                            year, attempt, max_retries, wait,
+                        )
+                        time.sleep(wait)
+                    else:
+                        logger.error(
+                            "Year %d — rate limit persists after %d attempts, skipping.",
+                            year, max_retries,
+                        )
+
+                else:
+                    logger.error("Year %d — unexpected status %s: %s",
+                                 year, response.status_code, response.text[:200])
+                    break  # non-retryable error
+
         return order_ids
 
     def download_command_file(self, order_ids):
