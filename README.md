@@ -19,8 +19,23 @@ Two interfaces are available: a **graphical interface** (PyQt6) and a
 
 ---
 
+## Windows Executable (no Python required)
+
+> For users who do not have Python installed.
+
+**[Download MeteoFrance_Client_v1.0.0.zip](https://github.com/Samy-K/MeteoFrance_API_Client/releases/download/v1.0.0/MeteoFrance_Client_v1.0.0.zip)**
+
+1. Extract the zip — you get `MeteoFrance_Client.exe` and `API_config.txt`
+2. Edit `API_config.txt` and paste your Météo-France token (see [token setup](#météo-france-api-token--step-by-step))
+3. Run `MeteoFrance_Client.exe`
+
+All releases: <https://github.com/Samy-K/MeteoFrance_API_Client/releases>
+
+---
+
 ## Table of Contents
 
+- [Windows Executable](#windows-executable-no-python-required)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Configuration](#configuration) — [Météo-France token setup](#météo-france-api-token--step-by-step)
