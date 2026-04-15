@@ -2,7 +2,8 @@
 Quality control report generator for hourly meteorological data.
 
 Produces ``quality_checks.pdf`` in the specified output directory.
-Individual figures are also saved as PNG in ``output_dir/figures/``.
+Full-page sheets are saved as PNG in ``output_dir/sheets/``.
+Individual subplot figures are saved as PNG in ``output_dir/figs/``.
 
 Per-variable checks
 -------------------
@@ -41,7 +42,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
 
-from src.utils import style_table as _style_table, solar_elevation_vec
+from src.utils import style_table as _style_table, solar_elevation_vec, label_slug, save_ax
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +155,8 @@ def _check_coherence(df: pd.DataFrame, dates: pd.Series,
 
 def _coherence_page(pdf: PdfPages, coherence_results: dict,
                     dates: pd.Series, n_total: int,
-                    figures_dir: Optional[str] = None) -> None:
+                    sheets_dir: Optional[str] = None,
+                    figs_dir: Optional[str] = None) -> None:
     """Dedicated page for cross-variable coherence check results."""
     fig = plt.figure(figsize=(8.27, 11.69))
     fig.patch.set_facecolor('white')
@@ -217,9 +219,16 @@ def _coherence_page(pdf: PdfPages, coherence_results: dict,
         ax.set_axisbelow(True)
 
     pdf.savefig(fig, bbox_inches='tight')
-    if figures_dir:
-        fig.savefig(os.path.join(figures_dir, 'coherence.png'),
+    if sheets_dir:
+        fig.savefig(os.path.join(sheets_dir, 'qc_coherence.png'),
                     bbox_inches='tight', dpi=150)
+    if figs_dir and active:
+        for ax_bar, (key, _) in zip(
+            [fig.axes[i] for i in range(len(fig.axes) - len(active), len(fig.axes))],
+            active,
+        ):
+            save_ax(fig, ax_bar,
+                    os.path.join(figs_dir, f'qc_coherence_{key}.png'), dpi=300)
     plt.close(fig)
 
 
@@ -320,7 +329,7 @@ def _check_variable(series: pd.Series, dates: pd.Series, cfg: VarConfig) -> dict
 
 def _cover_page(pdf: PdfPages, df: pd.DataFrame, station_info: pd.DataFrame,
                 all_checks: dict, n_gaps: int, n_dup: int,
-                figures_dir: Optional[str] = None) -> None:
+                sheets_dir: Optional[str] = None) -> None:
     """Write the report cover page to *pdf*.
 
     Displays station metadata, time-series statistics, flag definitions,
@@ -333,8 +342,8 @@ def _cover_page(pdf: PdfPages, df: pd.DataFrame, station_info: pd.DataFrame,
         all_checks (dict): Per-variable check results from ``_check_variable``.
         n_gaps (int): Number of irregular time steps detected.
         n_dup (int): Number of duplicate timestamps detected.
-        figures_dir (str, optional): If provided, the page is also saved as
-            ``{figures_dir}/cover.png`` at 150 dpi.
+        sheets_dir (str, optional): If provided, the full A4 page is saved as
+            ``{sheets_dir}/qc_cover.png`` at 150 dpi.
     """
     fig = plt.figure(figsize=(8.27, 11.69))
     fig.patch.set_facecolor('white')
@@ -443,8 +452,8 @@ def _cover_page(pdf: PdfPages, df: pd.DataFrame, station_info: pd.DataFrame,
             cell.set_text_props(ha='left')
 
     pdf.savefig(fig, bbox_inches='tight')
-    if figures_dir:
-        fig.savefig(os.path.join(figures_dir, 'cover.png'), bbox_inches='tight', dpi=150)
+    if sheets_dir:
+        fig.savefig(os.path.join(sheets_dir, 'qc_cover.png'), bbox_inches='tight', dpi=150)
     plt.close(fig)
 
 
@@ -452,7 +461,8 @@ def _cover_page(pdf: PdfPages, df: pd.DataFrame, station_info: pd.DataFrame,
 
 def _variable_page(pdf: PdfPages, var: str, series: pd.Series,
                    dates: pd.Series, cfg: VarConfig, chk: dict,
-                   figures_dir: Optional[str] = None) -> None:
+                   sheets_dir: Optional[str] = None,
+                   figs_dir: Optional[str] = None) -> None:
     """Write one per-variable quality page to *pdf*.
 
     Layout (A4 portrait):
@@ -468,8 +478,10 @@ def _variable_page(pdf: PdfPages, var: str, series: pd.Series,
         dates (pd.Series): Corresponding UTC timestamps.
         cfg (VarConfig): Display label, unit, and threshold configuration.
         chk (dict): Check results dict from ``_check_variable``.
-        figures_dir (str, optional): If provided, the page is also saved as
-            ``{figures_dir}/{var}.png`` at 150 dpi.
+        sheets_dir (str, optional): If provided, the full A4 page is saved as
+            ``{sheets_dir}/qc_{label_slug}.png`` at 150 dpi.
+        figs_dir (str, optional): If provided, individual subplots are saved
+            as PNG at 300 dpi under ``{figs_dir}/``.
     """
     fig = plt.figure(figsize=(8.27, 11.69))
     fig.patch.set_facecolor('white')
@@ -591,9 +603,13 @@ def _variable_page(pdf: PdfPages, var: str, series: pd.Series,
     ax_bar.set_title('Missing Values per Year', fontsize=9,
                      fontweight='bold', loc='left', pad=4)
 
+    slug = label_slug(cfg.label)
     pdf.savefig(fig, bbox_inches='tight')
-    if figures_dir:
-        fig.savefig(os.path.join(figures_dir, f'{var}.png'), bbox_inches='tight', dpi=150)
+    if sheets_dir:
+        fig.savefig(os.path.join(sheets_dir, f'qc_{slug}.png'), bbox_inches='tight', dpi=150)
+    if figs_dir:
+        save_ax(fig, ax_ts,  os.path.join(figs_dir, f'qc_{slug}_timeseries.png'),       dpi=300)
+        save_ax(fig, ax_bar, os.path.join(figs_dir, f'qc_{slug}_missing_per_year.png'), dpi=300)
     plt.close(fig)
 
 
@@ -643,15 +659,19 @@ def generate_quality_pdf(dataset_manager, station_info: pd.DataFrame,
             logger.info("Coherence %-14s | incidents=%d", key, chk['n'])
 
     os.makedirs(output_dir, exist_ok=True)
-    figures_dir = os.path.join(output_dir, 'figures')
-    os.makedirs(figures_dir, exist_ok=True)
+    sheets_dir = os.path.join(output_dir, 'sheets')
+    figs_dir   = os.path.join(output_dir, 'figs')
+    os.makedirs(sheets_dir, exist_ok=True)
+    os.makedirs(figs_dir,  exist_ok=True)
     out_path = os.path.join(output_dir, 'quality_checks.pdf')
 
     with PdfPages(out_path) as pdf:
-        _cover_page(pdf, df, station_info, all_checks, n_gaps, n_dup, figures_dir=figures_dir)
-        _coherence_page(pdf, coherence_results, dates, len(df), figures_dir=figures_dir)
+        _cover_page(pdf, df, station_info, all_checks, n_gaps, n_dup, sheets_dir=sheets_dir)
+        _coherence_page(pdf, coherence_results, dates, len(df),
+                        sheets_dir=sheets_dir, figs_dir=figs_dir)
         for var, chk in all_checks.items():
-            _variable_page(pdf, var, df[var], dates, VARIABLES[var], chk, figures_dir=figures_dir)
+            _variable_page(pdf, var, df[var], dates, VARIABLES[var], chk,
+                           sheets_dir=sheets_dir, figs_dir=figs_dir)
 
     logger.info("Quality report saved: %s", out_path)
     return all_checks

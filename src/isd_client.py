@@ -41,10 +41,11 @@ import pandas as pd
 import requests
 
 from src.data_handler import DatasetManager
+from src.utils import resource_path
 
 logger = logging.getLogger(__name__)
 
-_ISD_STATIONS_CSV = os.path.join("weather_stations_infos", "isd_stations.csv")
+_ISD_STATIONS_CSV = resource_path(os.path.join("weather_stations_infos", "isd_stations.csv"))
 _ISD_LITE_BASE    = "https://www.ncei.noaa.gov/pub/data/noaa/isd-lite"
 _MISSING_FLAG    = -9999
 _MAX_RESULTS     = 30

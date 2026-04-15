@@ -171,9 +171,18 @@ def _load_checkpoint() -> tuple[pd.DataFrame, set]:
 
 
 def _save(rows: list[dict], existing_df: pd.DataFrame) -> pd.DataFrame:
-    """Append *rows* to *existing_df*, write CSV, return updated DataFrame."""
-    new_df = pd.DataFrame(rows)
+    """Append *rows* to *existing_df*, deduplicate by ID, write CSV.
+
+    Deduplication keeps the last occurrence of each station ID so that a
+    re-run or a resumed checkpoint never creates duplicate rows.
+    """
+    new_df   = pd.DataFrame(rows)
     combined = pd.concat([existing_df, new_df], ignore_index=True)
+    before   = len(combined)
+    combined = combined.drop_duplicates(subset=['ID'], keep='last').reset_index(drop=True)
+    dropped  = before - len(combined)
+    if dropped:
+        logger.warning("Removed %d duplicate station ID(s) before saving.", dropped)
     combined.to_csv(OUTPUT_CSV, index=False, encoding='utf-8')
     return combined
 

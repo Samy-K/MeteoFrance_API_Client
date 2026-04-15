@@ -47,8 +47,19 @@ def main():
     for col in ('USAF', 'WBAN', 'BEGIN', 'END'):
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
+    # The NOAA source occasionally contains duplicate USAF+WBAN entries.
+    # Keep the row with the most recent END date for each composite key.
+    before = len(df)
+    df = (df
+          .sort_values('END', ascending=False, na_position='last')
+          .drop_duplicates(subset=['USAF', 'WBAN'], keep='first')
+          .reset_index(drop=True))
+    dropped = before - len(df)
+    if dropped:
+        logger.info("Removed %d duplicate USAF+WBAN row(s) from source data.", dropped)
+
     df.to_csv(OUTPUT_CSV, index=False, encoding='utf-8')
-    logger.info("Saved %d stations → %s", len(df), OUTPUT_CSV)
+    logger.info("Saved %d stations -> %s", len(df), OUTPUT_CSV)
 
 
 if __name__ == '__main__':

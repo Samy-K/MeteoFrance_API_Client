@@ -132,8 +132,7 @@ class DatasetManager:
         """Write the dataset to a commented CSV file in *output_dir*.
 
         Station metadata is prepended as ``#``-prefixed comment lines so
-        the file is self-describing.  The ``output_dir/figures/`` sub-directory
-        is also created to hold future plot exports.
+        the file is self-describing.
 
         Output path: ``{output_dir}/RAW_DATA_{station_name}_{start_year}-{end_year}.csv``
 
@@ -147,9 +146,6 @@ class DatasetManager:
             output_dir (str): Directory in which to write the output CSV.
                 Created if it does not exist.
         """
-        figures_dir = os.path.join(output_dir, "figures")
-        os.makedirs(figures_dir, exist_ok=True)
-
         file_name = os.path.join(output_dir, "RAW_DATA_" + station_name + '_' + str(start_year) + '-' + str(end_year) + '.csv')
 
         _col_en = {

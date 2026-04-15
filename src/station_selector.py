@@ -18,11 +18,11 @@ import sys
 import numpy as np
 import pandas as pd
 
-from src.utils import parse_coord
+from src.utils import parse_coord, resource_path
 
 logger = logging.getLogger(__name__)
 
-MF_STATIONS_CSV = os.path.join("weather_stations_infos", "mf_stations.csv")
+MF_STATIONS_CSV = resource_path(os.path.join("weather_stations_infos", "mf_stations.csv"))
 
 
 def load_mf_stations() -> pd.DataFrame:

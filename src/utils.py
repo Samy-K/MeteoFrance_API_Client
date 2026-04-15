@@ -10,10 +10,30 @@ Updated: 2026
 """
 
 import math
+import os
 import re
+import sys
 from typing import Tuple
 
 import numpy as np
+
+
+def resource_path(relative_path: str) -> str:
+    """Return the absolute path to a bundled resource.
+
+    In development, resolves relative to the current working directory.
+    When frozen by PyInstaller (--onefile), resolves relative to the
+    temporary extraction directory ``sys._MEIPASS``.
+
+    Args:
+        relative_path (str): Path relative to the project root
+            (e.g. ``'weather_stations_infos/mf_stations.csv'``).
+
+    Returns:
+        str: Absolute path usable with ``open()`` or ``pd.read_csv()``.
+    """
+    base = getattr(sys, '_MEIPASS', os.getcwd())
+    return os.path.join(base, relative_path)
 
 
 def mann_kendall(y) -> Tuple[float, float, float, float]:
@@ -124,6 +144,53 @@ def parse_coord(s: str) -> float:
         return float(s.replace(',', '.'))
     except ValueError:
         raise ValueError(f"Cannot parse coordinate: '{s}'")
+
+
+def label_slug(label: str) -> str:
+    """Convert a variable label to a filesystem-safe slug.
+
+    Example::
+
+        label_slug('2 m Air Temperature') → '2_m_air_temperature'
+        label_slug('Dew Point Temperature') → 'dew_point_temperature'
+
+    Args:
+        label (str): Human-readable variable label.
+
+    Returns:
+        str: Lowercase slug with non-alphanumeric runs replaced by ``_``.
+    """
+    return re.sub(r'[^a-z0-9]+', '_', label.lower()).strip('_')
+
+
+def save_ax(fig, ax, path: str, dpi: int = 300) -> None:
+    """Save a single axes panel from a multi-axes figure as a PNG.
+
+    Extracts the tight bounding box of *ax* (including its title and labels)
+    from the already-drawn *fig* and writes it to *path* at *dpi* dpi.
+    The output directory is created automatically if it does not exist.
+
+    Args:
+        fig: The parent matplotlib Figure.
+        ax: The Axes to extract.
+        path (str): Destination file path (PNG).
+        dpi (int): Resolution in dots per inch (default 300).
+    """
+    import os
+    fig.canvas.draw()
+    try:
+        renderer = fig.canvas.get_renderer()
+        bb_disp = ax.get_tightbbox(renderer)
+    except AttributeError:
+        bb_disp = ax.get_tightbbox()
+    if bb_disp is None:
+        return
+    bb_in = bb_disp.transformed(fig.dpi_scale_trans.inverted())
+    bb_in = bb_in.expanded(1.03, 1.06)
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    fig.savefig(path, bbox_inches=bb_in, dpi=dpi, facecolor='white')
 
 
 def style_table(tbl, header_color: str = '#2c3e50', stripe_color: str = '#ecf0f1',
