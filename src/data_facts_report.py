@@ -2,7 +2,8 @@
 Climatological factsheet generator for hourly meteorological data.
 
 Produces ``factsheet.pdf`` (one A4 page per variable group) plus PNG
-figures saved in ``output_dir/figures/``.
+Full-page sheets saved in ``output_dir/sheets/``.
+Individual subplot figures saved in ``output_dir/figs/``.
 
 Pages generated (skipped automatically when the variable is absent)
 --------------------------------------------------------------------
@@ -38,7 +39,7 @@ import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Patch
 
-from src.utils import mann_kendall as _mann_kendall, style_table as _style_table
+from src.utils import mann_kendall as _mann_kendall, style_table as _style_table, save_ax, label_slug
 
 logger = logging.getLogger(__name__)
 
@@ -252,7 +253,7 @@ def _wind_rose_ax(ax, ff: pd.Series, dd: pd.Series):
 
 def _cover_page(pdf: PdfPages, df: pd.DataFrame, station_info: pd.DataFrame,
                 n_years: float, dti: pd.DatetimeIndex,
-                figures_dir: Optional[str] = None) -> None:
+                sheets_dir: Optional[str] = None) -> None:
     fig = plt.figure(figsize=(8.27, 11.69))
     fig.patch.set_facecolor('white')
 
@@ -336,8 +337,8 @@ def _cover_page(pdf: PdfPages, df: pd.DataFrame, station_info: pd.DataFrame,
             cell.set_text_props(ha='left')
 
     pdf.savefig(fig, bbox_inches='tight')
-    if figures_dir:
-        fig.savefig(os.path.join(figures_dir, 'factsheet_cover.png'),
+    if sheets_dir:
+        fig.savefig(os.path.join(sheets_dir, 'factsheet_cover.png'),
                     dpi=150, bbox_inches='tight')
     plt.close(fig)
 
@@ -348,7 +349,8 @@ def _cover_page(pdf: PdfPages, df: pd.DataFrame, station_info: pd.DataFrame,
 
 def _page_temperature(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
                       dti: pd.DatetimeIndex,
-                      figures_dir: Optional[str] = None) -> None:
+                      sheets_dir: Optional[str] = None,
+                      figs_dir: Optional[str] = None) -> None:
     if 'T' not in df.columns or not df['T'].notna().any():
         return
     T      = df['T']
@@ -433,9 +435,14 @@ def _page_temperature(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
                    'Max T (°C)', 'Min T (°C)', '°C')
 
     pdf.savefig(fig, bbox_inches='tight')
-    if figures_dir:
-        fig.savefig(os.path.join(figures_dir, 'factsheet_temperature.png'),
+    if sheets_dir:
+        fig.savefig(os.path.join(sheets_dir, 'factsheet_temperature.png'),
                     dpi=150, bbox_inches='tight')
+    if figs_dir:
+        save_ax(fig, ax_c, os.path.join(figs_dir, 'factsheet_temperature_monthly_climatology.png'), dpi=300)
+        save_ax(fig, ax_d, os.path.join(figs_dir, 'factsheet_temperature_diurnal_cycle.png'),       dpi=300)
+        save_ax(fig, ax_t, os.path.join(figs_dir, 'factsheet_temperature_annual_trend.png'),        dpi=300)
+        save_ax(fig, ax_r, os.path.join(figs_dir, 'factsheet_temperature_records.png'),             dpi=300)
     plt.close(fig)
 
 
@@ -445,7 +452,8 @@ def _page_temperature(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
 
 def _page_humidity(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
                    dti: pd.DatetimeIndex,
-                   figures_dir: Optional[str] = None) -> None:
+                   sheets_dir: Optional[str] = None,
+                   figs_dir: Optional[str] = None) -> None:
     has_u    = 'U'    in df.columns and df['U'].notna().any()
     has_uabs = 'UABS' in df.columns and df['UABS'].notna().any()
     if not has_u and not has_uabs:
@@ -518,9 +526,14 @@ def _page_humidity(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
                    f'Max ({unit_p})', f'Min ({unit_p})', unit_p)
 
     pdf.savefig(fig, bbox_inches='tight')
-    if figures_dir:
-        fig.savefig(os.path.join(figures_dir, 'factsheet_humidity.png'),
+    if sheets_dir:
+        fig.savefig(os.path.join(sheets_dir, 'factsheet_humidity.png'),
                     dpi=150, bbox_inches='tight')
+    if figs_dir:
+        save_ax(fig, ax_c, os.path.join(figs_dir, 'factsheet_humidity_monthly_climatology.png'), dpi=300)
+        save_ax(fig, ax_d, os.path.join(figs_dir, 'factsheet_humidity_diurnal_cycle.png'),       dpi=300)
+        save_ax(fig, ax_t, os.path.join(figs_dir, 'factsheet_humidity_annual_trend.png'),        dpi=300)
+        save_ax(fig, ax_r, os.path.join(figs_dir, 'factsheet_humidity_records.png'),             dpi=300)
     plt.close(fig)
 
 
@@ -530,7 +543,8 @@ def _page_humidity(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
 
 def _page_pressure(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
                    dti: pd.DatetimeIndex,
-                   figures_dir: Optional[str] = None) -> None:
+                   sheets_dir: Optional[str] = None,
+                   figs_dir: Optional[str] = None) -> None:
     if 'PSTAT' not in df.columns or not df['PSTAT'].notna().any():
         return
     P = df['PSTAT']
@@ -585,9 +599,14 @@ def _page_pressure(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
                    'Max PSTAT (hPa)', 'Min PSTAT (hPa)', 'hPa')
 
     pdf.savefig(fig, bbox_inches='tight')
-    if figures_dir:
-        fig.savefig(os.path.join(figures_dir, 'factsheet_pressure.png'),
+    if sheets_dir:
+        fig.savefig(os.path.join(sheets_dir, 'factsheet_pressure.png'),
                     dpi=150, bbox_inches='tight')
+    if figs_dir:
+        save_ax(fig, ax_c, os.path.join(figs_dir, 'factsheet_pressure_monthly_climatology.png'), dpi=300)
+        save_ax(fig, ax_d, os.path.join(figs_dir, 'factsheet_pressure_diurnal_cycle.png'),       dpi=300)
+        save_ax(fig, ax_t, os.path.join(figs_dir, 'factsheet_pressure_annual_trend.png'),        dpi=300)
+        save_ax(fig, ax_r, os.path.join(figs_dir, 'factsheet_pressure_records.png'),             dpi=300)
     plt.close(fig)
 
 
@@ -597,7 +616,8 @@ def _page_pressure(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
 
 def _page_wind(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
                dti: pd.DatetimeIndex,
-               figures_dir: Optional[str] = None) -> None:
+               sheets_dir: Optional[str] = None,
+               figs_dir: Optional[str] = None) -> None:
     has_ff = 'FF' in df.columns and df['FF'].notna().any()
     has_dd = 'DD' in df.columns and df['DD'].notna().any()
     if not has_ff:
@@ -669,9 +689,14 @@ def _page_wind(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
         _style_table(t, header_color='#2c3e50')
 
     pdf.savefig(fig, bbox_inches='tight')
-    if figures_dir:
-        fig.savefig(os.path.join(figures_dir, 'factsheet_wind.png'),
+    if sheets_dir:
+        fig.savefig(os.path.join(sheets_dir, 'factsheet_wind.png'),
                     dpi=150, bbox_inches='tight')
+    if figs_dir:
+        save_ax(fig, ax_rose, os.path.join(figs_dir, 'factsheet_wind_rose.png'),          dpi=300)
+        save_ax(fig, ax_box,  os.path.join(figs_dir, 'factsheet_wind_monthly_boxplot.png'), dpi=300)
+        save_ax(fig, ax_t,    os.path.join(figs_dir, 'factsheet_wind_annual_trend.png'),   dpi=300)
+        save_ax(fig, ax_r,    os.path.join(figs_dir, 'factsheet_wind_records.png'),        dpi=300)
     plt.close(fig)
 
 
@@ -681,7 +706,8 @@ def _page_wind(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
 
 def _page_radiation(pdf: PdfPages, df: pd.DataFrame,
                     dti: pd.DatetimeIndex,
-                    figures_dir: Optional[str] = None) -> None:
+                    sheets_dir: Optional[str] = None,
+                    figs_dir: Optional[str] = None) -> None:
     rad_vars = {v: l for v, l in [('GLO', 'Global'), ('DIR', 'Direct'),
                                    ('DIF', 'Diffuse'), ('INFRAR', 'Infrared')]
                 if v in df.columns and df[v].notna().any()}
@@ -753,9 +779,13 @@ def _page_radiation(pdf: PdfPages, df: pd.DataFrame,
                    fontsize=9, fontweight='bold', loc='left', pad=3)
 
     pdf.savefig(fig, bbox_inches='tight')
-    if figures_dir:
-        fig.savefig(os.path.join(figures_dir, 'factsheet_radiation.png'),
+    if sheets_dir:
+        fig.savefig(os.path.join(sheets_dir, 'factsheet_radiation.png'),
                     dpi=150, bbox_inches='tight')
+    if figs_dir:
+        save_ax(fig, ax_c,  os.path.join(figs_dir, 'factsheet_radiation_monthly_climatology.png'), dpi=300)
+        save_ax(fig, ax_hm, os.path.join(figs_dir, 'factsheet_radiation_diurnal_heatmap.png'),     dpi=300)
+        save_ax(fig, ax_t,  os.path.join(figs_dir, 'factsheet_radiation_annual_trend.png'),        dpi=300)
     plt.close(fig)
 
 
@@ -765,7 +795,8 @@ def _page_radiation(pdf: PdfPages, df: pd.DataFrame,
 
 def _page_precipitation(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
                         dti: pd.DatetimeIndex,
-                        figures_dir: Optional[str] = None) -> None:
+                        sheets_dir: Optional[str] = None,
+                        figs_dir: Optional[str] = None) -> None:
     if 'RR1' not in df.columns or not df['RR1'].notna().any():
         return
     RR = df['RR1']
@@ -827,9 +858,13 @@ def _page_precipitation(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
         _style_table(t, header_color='#2980b9')
 
     pdf.savefig(fig, bbox_inches='tight')
-    if figures_dir:
-        fig.savefig(os.path.join(figures_dir, 'factsheet_precipitation.png'),
+    if sheets_dir:
+        fig.savefig(os.path.join(sheets_dir, 'factsheet_precipitation.png'),
                     dpi=150, bbox_inches='tight')
+    if figs_dir:
+        save_ax(fig, ax_c, os.path.join(figs_dir, 'factsheet_precipitation_monthly_climatology.png'), dpi=300)
+        save_ax(fig, ax_t, os.path.join(figs_dir, 'factsheet_precipitation_annual_trend.png'),        dpi=300)
+        save_ax(fig, ax_r, os.path.join(figs_dir, 'factsheet_precipitation_records.png'),             dpi=300)
     plt.close(fig)
 
 
@@ -839,7 +874,8 @@ def _page_precipitation(pdf: PdfPages, df: pd.DataFrame, dates: pd.Series,
 
 def _page_cloudcover(pdf: PdfPages, df: pd.DataFrame,
                      dti: pd.DatetimeIndex,
-                     figures_dir: Optional[str] = None) -> None:
+                     sheets_dir: Optional[str] = None,
+                     figs_dir: Optional[str] = None) -> None:
     if 'N' not in df.columns or not df['N'].notna().any():
         return
     N = df['N']
@@ -902,15 +938,19 @@ def _page_cloudcover(pdf: PdfPages, df: pd.DataFrame,
                    fontweight='bold', loc='left', pad=3)
 
     pdf.savefig(fig, bbox_inches='tight')
-    if figures_dir:
-        fig.savefig(os.path.join(figures_dir, 'factsheet_cloudcover.png'),
+    if sheets_dir:
+        fig.savefig(os.path.join(sheets_dir, 'factsheet_cloudcover.png'),
                     dpi=150, bbox_inches='tight')
+    if figs_dir:
+        save_ax(fig, ax_c, os.path.join(figs_dir, 'factsheet_cloudcover_monthly_frequency.png'), dpi=300)
+        save_ax(fig, ax_t, os.path.join(figs_dir, 'factsheet_cloudcover_annual_trend.png'),      dpi=300)
     plt.close(fig)
 
 
 def _page_thresholds(pdf: PdfPages, df: pd.DataFrame,
                      dti: pd.DatetimeIndex,
-                     figures_dir: Optional[str] = None) -> None:
+                     sheets_dir: Optional[str] = None,
+                     figs_dir: Optional[str] = None) -> None:
     """Annual threshold-exceedance counts for key climate indicators."""
     active = []
     for var, op, thr, label, unit in _THRESHOLDS:
@@ -952,9 +992,13 @@ def _page_thresholds(pdf: PdfPages, df: pd.DataFrame,
         ax.set_axisbelow(True)
 
     pdf.savefig(fig, bbox_inches='tight')
-    if figures_dir:
-        fig.savefig(os.path.join(figures_dir, 'factsheet_thresholds.png'),
+    if sheets_dir:
+        fig.savefig(os.path.join(sheets_dir, 'factsheet_thresholds.png'),
                     dpi=150, bbox_inches='tight')
+    if figs_dir:
+        for ax, (lbl, *_) in zip(axes, active):
+            slug = label_slug(lbl)
+            save_ax(fig, ax, os.path.join(figs_dir, f'factsheet_threshold_{slug}.png'), dpi=300)
     plt.close(fig)
 
 
@@ -968,15 +1012,15 @@ def generate_factsheet_pdf(dataset_manager, station_info: pd.DataFrame,
 
     Produces one A4 page per variable group (cover + up to 8 variable pages).
     Pages whose required variables are absent from the dataset are silently
-    skipped.  Individual figures are also saved as PNG files under
-    ``output_dir/figures/``.
+    skipped.  Full-page sheets are saved under ``output_dir/sheets/`` (150 dpi)
+    and individual subplot figures under ``output_dir/figs/`` (300 dpi).
 
     Args:
         dataset_manager: A ``DatasetManager`` instance whose ``.data``
             DataFrame contains at least a ``DATE`` column.
         station_info (pd.DataFrame): One-row station metadata DataFrame
             (ID, Nom, Altitude, Latitude, Longitude, DateDebut, DateFin).
-        output_dir (str): Directory in which to write the PDF and figures.
+        output_dir (str): Directory in which to write the PDF, sheets, and figs.
             Created if it does not exist.
 
     Returns:
@@ -994,20 +1038,22 @@ def generate_factsheet_pdf(dataset_manager, station_info: pd.DataFrame,
             "Climatological statistics may not be representative.", n_years)
 
     os.makedirs(output_dir, exist_ok=True)
-    figures_dir = os.path.join(output_dir, 'figures')
-    os.makedirs(figures_dir, exist_ok=True)
+    sheets_dir = os.path.join(output_dir, 'sheets')
+    figs_dir   = os.path.join(output_dir, 'figs')
+    os.makedirs(sheets_dir, exist_ok=True)
+    os.makedirs(figs_dir,   exist_ok=True)
     out_path = os.path.join(output_dir, 'factsheet.pdf')
 
     with PdfPages(out_path) as pdf:
-        _cover_page(pdf, df, station_info, n_years, dti, figures_dir)
-        _page_temperature(pdf, df, dates, dti, figures_dir)
-        _page_humidity(pdf, df, dates, dti, figures_dir)
-        _page_pressure(pdf, df, dates, dti, figures_dir)
-        _page_wind(pdf, df, dates, dti, figures_dir)
-        _page_radiation(pdf, df, dti, figures_dir)
-        _page_precipitation(pdf, df, dates, dti, figures_dir)
-        _page_cloudcover(pdf, df, dti, figures_dir)
-        _page_thresholds(pdf, df, dti, figures_dir)
+        _cover_page(pdf, df, station_info, n_years, dti, sheets_dir)
+        _page_temperature(pdf, df, dates, dti, sheets_dir, figs_dir)
+        _page_humidity(pdf, df, dates, dti, sheets_dir, figs_dir)
+        _page_pressure(pdf, df, dates, dti, sheets_dir, figs_dir)
+        _page_wind(pdf, df, dates, dti, sheets_dir, figs_dir)
+        _page_radiation(pdf, df, dti, sheets_dir, figs_dir)
+        _page_precipitation(pdf, df, dates, dti, sheets_dir, figs_dir)
+        _page_cloudcover(pdf, df, dti, sheets_dir, figs_dir)
+        _page_thresholds(pdf, df, dti, sheets_dir, figs_dir)
 
     logger.info("Factsheet saved: %s", out_path)
     return out_path
