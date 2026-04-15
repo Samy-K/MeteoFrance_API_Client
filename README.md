@@ -23,7 +23,7 @@ Two interfaces are available: a **graphical interface** (PyQt6) and a
 
 - [Requirements](#requirements)
 - [Installation](#installation)
-- [Configuration](#configuration)
+- [Configuration](#configuration) — [Météo-France token setup](#météo-france-api-token--step-by-step)
 - [First-time setup — station catalogues](#first-time-setup--station-catalogues)
 - [Usage — GUI](#usage--gui)
 - [Usage — CLI](#usage--cli)
@@ -59,28 +59,36 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Create (or update) `API_config.txt` in the project root **before** using
-the Météo-France data source:
+### Météo-France API token — step by step
+
+> The NOAA ISD-Lite source requires **no credentials** — skip this section if
+> you only need worldwide NOAA data.
+
+1. **Create an account** at <https://portail-api.meteofrance.fr/web/en/>
+
+2. **Subscribe to the Climatological Data API** (free):  
+   *Climatology → Climatological data → Subscribe for free*
+
+3. **Generate a token**:  
+   Go to <https://portail-api.meteofrance.fr/web/en/dashboard>  
+   (*Account → My APIs*), then click **Generate Token** and copy the result.
+
+4. **Set the token** — choose one of:
+   - Open `API_config.txt` and paste the token after `TOKEN =`
+   - In the GUI, click **Configure API…** and paste it into the *TOKEN* field,
+     then click *Save*
 
 ```ini
 [Parameters]
-APPLICATION_ID = Your_Application_ID   ; OAuth2 client-credentials (valid 1 h)
+APPLICATION_ID =                                               ; leave blank if using token only
 DATA_SERVER    = https://public-api.meteofrance.fr/public/DPClim/v1
-TOKEN          = Your_API_Key          ; Static API token
+TOKEN          = <paste your token here>
 ```
 
-> Provide **at least one** of `APPLICATION_ID` or `TOKEN`.  
-> When a static token expires (HTTP 401), the client automatically fetches a
-> fresh OAuth2 token if `APPLICATION_ID` is set.
-
-API credentials and documentation:
-<https://portail-api.meteofrance.fr/web/fr>
-
-The NOAA ISD-Lite source requires **no credentials** — data is fetched
-directly from the NCEI public HTTPS server.
-
-In the GUI, credentials can also be entered via the **Configure API…** button
-without editing `API_config.txt` directly.
+> **Token lifetime**: static tokens do not expire, but can be revoked and
+> regenerated from the dashboard at any time.  
+> If you also set `APPLICATION_ID` (OAuth2 client credentials), the client
+> automatically fetches a fresh token on any HTTP 401 response.
 
 ---
 

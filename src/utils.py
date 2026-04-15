@@ -10,10 +10,30 @@ Updated: 2026
 """
 
 import math
+import os
 import re
+import sys
 from typing import Tuple
 
 import numpy as np
+
+
+def resource_path(relative_path: str) -> str:
+    """Return the absolute path to a bundled resource.
+
+    In development, resolves relative to the current working directory.
+    When frozen by PyInstaller (--onefile), resolves relative to the
+    temporary extraction directory ``sys._MEIPASS``.
+
+    Args:
+        relative_path (str): Path relative to the project root
+            (e.g. ``'weather_stations_infos/mf_stations.csv'``).
+
+    Returns:
+        str: Absolute path usable with ``open()`` or ``pd.read_csv()``.
+    """
+    base = getattr(sys, '_MEIPASS', os.getcwd())
+    return os.path.join(base, relative_path)
 
 
 def mann_kendall(y) -> Tuple[float, float, float, float]:
