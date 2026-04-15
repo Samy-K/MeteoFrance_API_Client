@@ -17,5 +17,4 @@ API_config.txt
 old_script.py
 scripts/
 
-# Catalogues de stations (générés — ne pas versionner)
-weather_stations_infos/
+

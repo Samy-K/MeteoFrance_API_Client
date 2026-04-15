@@ -295,10 +295,27 @@ class Client(object):
                     logger.warning("Order %s — status %s, attempt %d/%d, waiting %ds.", order_id, response.status_code, attempt, max_attempts, wait_time)
                     time.sleep(wait_time - REQUEST_INTERVAL)  # REQUEST_INTERVAL already elapsed above
                 elif response.status_code in [404, 410, 507]:
-                    logger.error("Order %s — download failed with status %s: %s", order_id, response.status_code, response.text)
+                    body = response.text or ''
+                    if 'pas de donn' in body.lower() or 'pas de données' in body.lower():
+                        logger.warning(
+                            "Order %s — no data available for this period (skipped).",
+                            order_id,
+                        )
+                    elif response.status_code == 410:
+                        logger.warning("Order %s — order expired (410), skipped.", order_id)
+                    elif response.status_code == 507:
+                        logger.error("Order %s — server storage full (507), skipped.", order_id)
+                    else:
+                        logger.error(
+                            "Order %s — download failed with status %s: %s",
+                            order_id, response.status_code, body[:200],
+                        )
                     break
                 else:
-                    logger.error("Order %s — unexpected status %s: %s", order_id, response.status_code, response.text)
+                    logger.error(
+                        "Order %s — unexpected status %s: %s",
+                        order_id, response.status_code, response.text[:200],
+                    )
                     break
             if attempt == max_attempts:
                 logger.error("Order %s — maximum retry attempts (%d) reached.", order_id, max_attempts)
