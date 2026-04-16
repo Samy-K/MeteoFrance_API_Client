@@ -113,32 +113,52 @@ def _make_html(
         href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #0d1117; }
+
+    /* ---- Theme variables ---- */
+    body {
+      --bg:          #f5f5f5;
+      --surface:     #ffffff;
+      --border:      #d0d7de;
+      --text:        #24292f;
+      --text-muted:  #57606a;
+      --shadow:      rgba(0,0,0,.12);
+      background: var(--bg);
+    }
+    body.dark {
+      --bg:          #0d1117;
+      --surface:     #161b22;
+      --border:      #30363d;
+      --text:        #c9d1d9;
+      --text-muted:  #8b949e;
+      --shadow:      rgba(0,0,0,.55);
+      background: var(--bg);
+    }
+
     #map { width: 100%; height: 100vh; }
 
-    /* Dark popup shell */
-    .dark-popup .leaflet-popup-content-wrapper {
-      background: #161b22;
-      color: #c9d1d9;
-      border: 1px solid #30363d;
+    /* Popup shell */
+    .map-popup .leaflet-popup-content-wrapper {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
       border-radius: 8px;
-      box-shadow: 0 6px 24px rgba(0,0,0,.6);
+      box-shadow: 0 4px 16px var(--shadow);
       padding: 0;
     }
-    .dark-popup .leaflet-popup-content { margin: 0; }
-    .dark-popup .leaflet-popup-tip { background: #161b22; }
-    .dark-popup a.leaflet-popup-close-button {
-      color: #8b949e; top: 6px; right: 8px;
+    .map-popup .leaflet-popup-content { margin: 0; }
+    .map-popup .leaflet-popup-tip { background: var(--surface); }
+    .map-popup a.leaflet-popup-close-button {
+      color: var(--text-muted); top: 6px; right: 8px;
     }
 
     /* Popup content */
     .popup-inner { padding: 10px 14px 12px; min-width: 180px; }
     .popup-title {
       font-weight: 700; font-size: 13px; margin-bottom: 6px;
-      padding-bottom: 4px; border-bottom: 1px solid #30363d;
+      padding-bottom: 4px; border-bottom: 1px solid var(--border);
     }
-    .popup-row { font-size: 11px; color: #8b949e; margin: 3px 0; }
-    .popup-row span { color: #c9d1d9; }
+    .popup-row { font-size: 11px; color: var(--text-muted); margin: 3px 0; }
+    .popup-row span { color: var(--text); }
     .btn-select {
       margin-top: 10px; padding: 6px 0; width: 100%;
       background: #238636; color: #fff; border: none;
@@ -147,28 +167,41 @@ def _make_html(
     }
     .btn-select:hover { background: #2ea043; }
 
-    /* Layer control — dark theme */
+    /* Layer control */
     .leaflet-control-layers {
-      background: #161b22 !important;
-      border: 1px solid #30363d !important;
-      color: #c9d1d9 !important;
+      background: var(--surface) !important;
+      border: 1px solid var(--border) !important;
+      color: var(--text) !important;
       border-radius: 6px !important;
     }
-    .leaflet-control-layers-toggle { background-color: #1f6feb; }
-    .leaflet-control-layers label { color: #c9d1d9; }
+    .leaflet-control-layers-toggle { background-color: #0078d4; }
+    .leaflet-control-layers label { color: var(--text) !important; }
 
     /* Legend */
     .legend {
-      background: #161b22;
-      color: #c9d1d9;
+      background: var(--surface);
+      color: var(--text);
       padding: 8px 12px;
       border-radius: 6px;
-      border: 1px solid #30363d;
+      border: 1px solid var(--border);
       font-size: 12px;
       line-height: 1.6;
+      box-shadow: 0 2px 8px var(--shadow);
     }
     .legend-item { display: flex; align-items: center; gap: 8px; }
     .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+
+    /* Theme toggle button */
+    .theme-toggle {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      width: 32px; height: 32px;
+      font-size: 16px; line-height: 32px; text-align: center;
+      cursor: pointer; box-shadow: 0 1px 4px var(--shadow);
+      transition: background .2s;
+    }
+    .theme-toggle:hover { background: var(--border); }
   </style>
 </head>
 <body>
@@ -186,21 +219,54 @@ def _make_html(
     const ISD_STATIONS = __ISD_JSON__;
 
     /* ------------------------------------------------------------------ */
-    /* Map initialisation — dark CartoDB tiles                              */
+    /* Map initialisation — CartoDB tiles (light default)                   */
     /* ------------------------------------------------------------------ */
     const map = L.map('map', { preferCanvas: true })
       .setView([__CENTER_LAT__, __CENTER_LON__], __ZOOM__);
 
-    L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-      {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> '
-          + '&copy; <a href="https://carto.com/">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 19,
+    const TILE_OPTS = {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> '
+        + '&copy; <a href="https://carto.com/">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 19,
+    };
+    const tileLight = L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', TILE_OPTS);
+    const tileDark  = L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',  TILE_OPTS);
+
+    let isDark = false;
+    tileLight.addTo(map);
+
+    /* ------------------------------------------------------------------ */
+    /* Theme toggle control                                                 */
+    /* ------------------------------------------------------------------ */
+    const ThemeToggle = L.Control.extend({
+      options: { position: 'topright' },
+      onAdd: function() {
+        const btn = L.DomUtil.create('div', 'theme-toggle');
+        btn.title = 'Toggle light / dark theme';
+        btn.innerHTML = '🌙';
+        L.DomEvent.on(btn, 'click', function(e) {
+          L.DomEvent.stopPropagation(e);
+          isDark = !isDark;
+          if (isDark) {
+            map.removeLayer(tileLight);
+            tileDark.addTo(map);
+            document.body.classList.add('dark');
+            btn.innerHTML = '☀️';
+          } else {
+            map.removeLayer(tileDark);
+            tileLight.addTo(map);
+            document.body.classList.remove('dark');
+            btn.innerHTML = '🌙';
+          }
+        });
+        return btn;
       }
-    ).addTo(map);
+    });
+    new ThemeToggle().addTo(map);
 
     /* ------------------------------------------------------------------ */
     /* QWebChannel bridge                                                   */
@@ -270,7 +336,7 @@ def _make_html(
     });
     MF_STATIONS.forEach(function(s) {
       var m = L.marker([s.lat, s.lon], { icon: mfIcon });
-      m.bindPopup(buildPopup(s, 'mf', MF_COLOR), { className: 'dark-popup', maxWidth: 240 });
+      m.bindPopup(buildPopup(s, 'mf', MF_COLOR), { className: 'map-popup', maxWidth: 240 });
       mfCluster.addLayer(m);
     });
     map.addLayer(mfCluster);
@@ -286,7 +352,7 @@ def _make_html(
     });
     ISD_STATIONS.forEach(function(s) {
       var m = L.marker([s.lat, s.lon], { icon: isdIcon });
-      m.bindPopup(buildPopup(s, 'isd', ISD_COLOR), { className: 'dark-popup', maxWidth: 240 });
+      m.bindPopup(buildPopup(s, 'isd', ISD_COLOR), { className: 'map-popup', maxWidth: 240 });
       isdCluster.addLayer(m);
     });
     map.addLayer(isdCluster);
