@@ -31,6 +31,8 @@ Two interfaces are available: a **graphical interface** (PyQt6) and a
 
 All releases: <https://github.com/Samy-K/MeteoFrance_API_Client/releases>
 
+![MeteoFrance API Client — GUI](assets/screenshot_gui.png)
+
 ---
 
 ## Table of Contents
